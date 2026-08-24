@@ -1,3 +1,47 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@theme {
+    /* Base Colors - Deep Maritime Navy & Crisp Slate */
+    /*--color-background: #0B132B; !* Dark Abyssal Navy *!*/
+    /*--color-surface: #FFFFFF;    !* Crisp White Surface for high legibility *!*/
+    /*--color-primary: #3A506B;    !* Steel Blue *!*/
+    /*--color-secondary: #00A8E8;  !* Nautical Cyan Accent *!*/
+    --color-background: #2F2F2F; /* Slate 50 - Soft Off-White Background */
+    --color-surface: #FCFCFC;    /* Pure White Surface Cards & Panels */
+    --color-primary: #7a9e7e;    /* Deep Slate 800 - Crisp Primary Buttons/Headers */
+    --color-secondary: #FBB02D;  /* Vibrant Azure Accent */
+    --color-tertiary: #FFFFFF;
+    /* Text Preset Colors */
+    --color-text-on-background: #FCFCFC; /* Ice White for high contrast on Dark Teal */
+    --color-text-on-surface: #2F2F2F;    /* Deep Dark Teal for White Cards */
+    --color-text-on-primary: #FCFCFC;    /* Deep Dark Teal for optimal WCAG contrast on Sage */
+    --color-text-on-secondary: #FCFCFC;  /* Deep Dark Teal on Amber Accent */
+    --color-text-on-tertiary: #2F2F2F;  /* Deep Dark Teal on Amber Accent */
+    --color-text-muted: #7a9e7e;         /* Soft Sage Gray for secondary labels */
+
+    /* Status Colors */
+    --color-status-available: #2A9D8F; /* Deep Sea Green */
+    --color-status-reserved: #FBB02D;  /* Golden Amber */
+    --color-status-occupied: #E63946;  /* Soft Coral Red */
+
+    /* Layout Elements */
+    --color-border: #1B2E35;     /* Dark Teal-Gray Border for Dark Surfaces */
+    --color-border-light: #E2E8F0; /* Soft Slate Border for Light Surfaces */
+}
+
+@layer base {
+    /* Target all native select controls */
+    select {
+        color: var(--color-text-on-surface);
+        background-color: var(--color-surface);
+       /* border-color: var(--color-border);*/
+    }
+
+    /* Target dropdown list items across operating systems */
+    select option {
+        color: #0F172A;
+        background-color: #FFFFFF;
+    }
+}

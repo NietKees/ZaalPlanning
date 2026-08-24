@@ -54,7 +54,14 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "better-sqlite3": "^13.0.3",
+    "bits-ui": "^2.19.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "electron-squirrel-startup": "^1.0.1",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
+    "sweetalert2": "^11.26.25"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -9,5 +9,15 @@ export default defineConfig({
       entry: "electron/main.ts",
       fileName: "main",
     },
+    rollupOptions: {
+      external: [
+        "better-sqlite3",
+        'bits-ui'
+        // "drizzle-orm",
+        // "./electron/backend/db",
+        // "./electron/backend/schema",
+        // "./electron/backend/users",
+      ],
+    },
   },
 });

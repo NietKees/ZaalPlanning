@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
+import "./backend/router";
+import {initBackupScheduler} from "./backend/routes/backup";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -12,6 +14,9 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    autoHideMenuBar: true,
+    title: "Plan Zaalhuur",
+
     webPreferences: {
       preload: path.join(import.meta.dirname, "preload.js"),
     },
@@ -57,3 +62,7 @@ app.on("activate", () => {
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
+
+app.whenReady().then(() => {
+  initBackupScheduler();
+})
