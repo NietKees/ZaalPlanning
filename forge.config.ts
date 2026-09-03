@@ -6,10 +6,32 @@ import { MakerRpm } from "@electron-forge/maker-rpm";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+// Simply list the packages that need to run natively outside the ASAR
+const modulesToCopy = [
+  'better-sqlite3',
+];
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: `**/node_modules/{${modulesToCopy.join(',')}}/**/*`,
+    },
+    extraResource: ["database.db"],
+  },
+  hooks: {
+    // Automatically copy both modules into the package staging area
+    packageAfterCopy: async (_, buildPath) => {
+      for (const mod of modulesToCopy) {
+        const src = path.join(__dirname, 'node_modules', mod);
+        const dest = path.join(buildPath, 'node_modules', mod);
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.cp(src, dest, { recursive: true });
+      }
+    },
   },
   rebuildConfig: {},
   makers: [
@@ -19,13 +41,10 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   plugins: [
-    // new AutoUnpackNativesPlugin({}),
+    new AutoUnpackNativesPlugin({}),
     new VitePlugin({
-      // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
-      // If you are familiar with Vite configuration, it will look really familiar.
       build: [
         {
-          // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
           entry: "electron/main.ts",
           config: "vite.main.config.ts",
           target: "main",
@@ -43,8 +62,6 @@ const config: ForgeConfig = {
         },
       ],
     }),
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,

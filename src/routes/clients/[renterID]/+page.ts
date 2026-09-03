@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import * as api from '$lib/api';
+export const prerender = false;
 
 export const load: PageLoad = async ({ params }) => {
     const renterId: number = +params.renterID;

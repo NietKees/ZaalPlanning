@@ -356,7 +356,7 @@
 
     <main class="h-full w-full flex overflow-hidden printable-view bg-white">
         {#if viewMode === 'week'}
-            <div class="flex flex-col w-full h-full overflow-hidden">
+            <div class="flex flex-col w-full h-full overflow-auto">
                 <div class="grid grid-cols-[70px_repeat(7,1fr)] border-b border-slate-200 bg-white sticky top-0 z-20 shadow-xs shrink-0">
                     <div class="border-r border-slate-100"></div>
                     {#each weekDays as day}
@@ -372,7 +372,7 @@
                     {/each}
                 </div>
 
-                <div class="grid grid-cols-[70px_repeat(7,1fr)] relative flex-1 bg-white overflow-auto">
+                <div class="grid grid-cols-[70px_repeat(7,1fr)] relative flex-1 bg-white">
                     <div class="border-r border-slate-200 bg-slate-50/50">
                         {#each visibleHours as h}
                             <div class="h-[60px] relative text-right pr-2">

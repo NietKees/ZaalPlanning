@@ -1,51 +1,78 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, protocol, net } from "electron";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import started from "electron-squirrel-startup";
 import "./backend/router";
-import {initBackupScheduler} from "./backend/routes/backup";
+import { initBackupScheduler } from "./backend/routes/backup";
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: {
+      standard: true,
+      secure: true,
+      allowServiceWorkers: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
+
 const createWindow = () => {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     autoHideMenuBar: true,
     title: "Plan Zaalhuur",
-
     webPreferences: {
       preload: path.join(import.meta.dirname, "preload.js"),
     },
   });
 
-  // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.webContents.on("did-frame-finish-load", () => {
       mainWindow.webContents.openDevTools({ mode: "detach" });
     });
   } else {
-    mainWindow.loadFile(
-      path.join(
-        import.meta.dirname,
-        `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
-      ),
-    );
+    // 1. Load root "/" (NOT "/index.html") so SvelteKit matches the "/" route
+    mainWindow.loadURL("app://-/");
   }
 };
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on("ready", createWindow);
+app.on("ready", () => {
+  // 2. Intercept app:// requests and map them cleanly to built files
+  protocol.handle("app", (request) => {
+    const url = new URL(request.url);
+    let requestPath = url.pathname;
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+    // Map root "/" or empty paths to index.html on disk
+    if (requestPath === "/" || requestPath === "") {
+      requestPath = "/index.html";
+    }
+    // If navigating to a directory route like /clients/, map to /clients/index.html
+    else if (requestPath.endsWith("/")) {
+      requestPath += "index.html";
+    }
+
+    const filePath = path.join(
+        app.getAppPath(),
+        ".vite",
+        "renderer",
+        MAIN_WINDOW_VITE_NAME,
+        requestPath
+    );
+
+    return net.fetch(pathToFileURL(filePath).href);
+  });
+
+  createWindow();
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
@@ -53,16 +80,11 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
-
 app.whenReady().then(() => {
   initBackupScheduler();
-})
+});

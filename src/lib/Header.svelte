@@ -11,7 +11,7 @@
     <header
             class="flex flex-col-[auto_1fr]   items-center justify-between border-b border-border bg-background text-text-on-background! px-4 py-3 shadow-sm gap-4 "
     >
-        <meta http-equiv="content-security-policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+<!--        <meta http-equiv="content-security-policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">-->
         <div class="flex items-center gap-3">
             <button
                     onclick={toggleSidebar}
