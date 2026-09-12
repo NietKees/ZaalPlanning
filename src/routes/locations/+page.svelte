@@ -13,6 +13,8 @@
     let isModalOpen = $state(false);
     let editingLocationId = $state<number | null>(null);
     let nameInput = $state('');
+    let hourlyRateInput: number | undefined = $state(19.91);
+    let sessionPriceInput: number | undefined = $state(69.69);
     let colorInput = $state('#7a9e7e');
 
     // Preset color swatches
@@ -30,12 +32,16 @@
         nameInput = '';
         colorInput = '#7a9e7e';
         isModalOpen = true;
+        hourlyRateInput = undefined;
+        sessionPriceInput = undefined;
     }
 
     function openEditModal(location: Location) {
         editingLocationId = location.id;
         nameInput = location.name;
         colorInput = location.color || '#7a9e7e';
+        hourlyRateInput = location.hourlyRate;
+        sessionPriceInput = location.sessionPrice;
         isModalOpen = true;
     }
 
@@ -52,13 +58,15 @@
             const updatedLocation: Location = {
                 id: editingLocationId,
                 name: nameInput.trim(),
-                color: colorInput
+                color: colorInput,
+                hourlyRate: hourlyRateInput,
             };
             await updateLocation(updatedLocation);
         } else {
             const newLocation: CreateLocationInput = {
                 name: nameInput.trim(),
-                color: colorInput
+                color: colorInput,
+                hourlyRate: hourlyRateInput,
             };
             await addLocation(newLocation);
         }
@@ -75,7 +83,7 @@
     }
 </script>
 <div class="h-full w-full bg-surface flex justify-center items-center py-6 text-text-on-surface">
-    <div class="max-w-4xl flex flex-col gap-2 h-full w-full">
+    <div class="max-w-4xl flex flex-col gap-2 h-full w-full px-4">
         <div class="flex gap-4 py-2 flex-row flex-col-[auto_1fr] justify between w-full border-b border-border">
             <span class="text-4xl font-bold">Locations</span>
             <div class="w-full gap-4 flex justify-end">
@@ -145,6 +153,18 @@
                             bind:value={nameInput}
                             required
                             placeholder="e.g. Studio A"
+                            class="w-full rounded-md border border-border bg-surface p-2 text-text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label for="location-name" class="font-semibold text-sm">Hourly tariff</label>
+                    <input
+                            id="location-name"
+                            type="number"
+                            step="0.01"
+                            bind:value={hourlyRateInput}
+                            placeholder="19.91"
                             class="w-full rounded-md border border-border bg-surface p-2 text-text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                 </div>

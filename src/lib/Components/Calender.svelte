@@ -490,12 +490,14 @@
                                             class="booking-pill w-full text-left flex items-center justify-between px-1 py-0.5 text-xs rounded border-l-2 cursor-pointer transition-all text-slate-900 hover:brightness-95"
                                             title="{booking.title} ({getRenterLabel(booking)})"
                                     >
-                                        <div class="flex items-center gap-1 overflow-hidden">
+                                        <span class="flex items-center gap-1 overflow-hidden">
                                             <span class="font-mono font-bold text-[9px] shrink-0 opacity-80">
-                                                {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')}
+                                                {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')} -
+                                                {booking.endHour.toString().padStart(2, '0')}:{booking.endMinute.toString().padStart(2, '0')}
+
                                             </span>
                                             <span class="truncate font-semibold text-[10px]">{booking.title}</span>
-                                        </div>
+                                        </span>
                                     </button>
                                 {/each}
                             </div>

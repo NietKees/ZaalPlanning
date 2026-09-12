@@ -1,8 +1,11 @@
 <script lang="ts">
-    import type { Booking, Renter, Location } from '$lib/types';
-
-    // Type for creating new bookings before an ID is assigned
-
+    import type {
+        Booking,
+        BookingInput,
+        Location,
+        Renter,
+    } from '$lib/types';
+    import {alert} from "$lib/utils/utils";
     let {
         isOpen = $bindable(false),
         bookingToEdit = null,
@@ -27,19 +30,20 @@
     let title = $state('');
     let locationId = $state<number | undefined>();
     let renterId = $state<number | undefined>();
-    let oneOffRenterName = $state<string | undefined>('');
+    let oneOffRenterName = $state<string>('');
     let recurrence = $state<'none' | 'weekly'>('none');
     let date = $state('');
-    let dayOfWeek = $state(1);
-    let startHour = $state(13);
-    let startMinute = $state(0);
-    let endHour = $state(14);
-    let endMinute = $state(0);
+    let dayOfWeek = $state<number>(1);
+    let startHour = $state<number>(13);
+    let startMinute = $state<number>(0);
+    let endHour = $state<number>(14);
+    let endMinute = $state<number>(0);
 
     // Pricing & Exclusion State
     let pricingType = $state<'session' | 'hourly'>('session');
-    let sessionPrice = $state<number | undefined>(69.69);
-    let hourlyRate = $state<number | undefined>(19.91);
+    let sessionPrice = $state<number | undefined>();
+    let hourlyRate = $state<number | undefined>();
+    let category = $state<string>('');
     let excludedDates = $state<string[]>([]);
     let newExcludedDate = $state('');
 
@@ -85,19 +89,28 @@
         excludedDates = excludedDates.filter((d) => d !== dateStr);
     }
 
-    // Reset or populate form when modal opens
+    // Dynamic fallback helper for rates based on selected location
+    function applyLocationDefaults(targetLocationId?: number) {
+        const loc = locations.find((l) => l.id === targetLocationId);
+        if (loc) {
+            if (loc.sessionPrice !== undefined) sessionPrice = loc.sessionPrice;
+            if (loc.hourlyRate !== undefined) hourlyRate = loc.hourlyRate;
+        }
+    }
+
+    // Reset or populate form when modal state changes
     $effect(() => {
         if (!isOpen) return;
 
         if (bookingToEdit) {
-            title = bookingToEdit.title;
+            title = bookingToEdit.title ?? '';
             locationId = bookingToEdit.locationId;
             renterId = bookingToEdit.renterId;
             oneOffRenterName = bookingToEdit.oneOffRenterName ?? '';
             recurrence = bookingToEdit.recurrence || 'none';
             date = bookingToEdit.date || formatDateToLocalISO(new Date());
 
-            if (bookingToEdit.dayOfWeek !== undefined) {
+            if (bookingToEdit.dayOfWeek !== undefined && bookingToEdit.dayOfWeek !== null) {
                 dayOfWeek = bookingToEdit.dayOfWeek;
             } else if (bookingToEdit.date) {
                 dayOfWeek = parseLocalDate(bookingToEdit.date).getDay();
@@ -112,12 +125,15 @@
 
             excludedDates = bookingToEdit.excludedDates ? [...bookingToEdit.excludedDates] : [];
             pricingType = bookingToEdit.sessionPrice !== undefined ? 'session' : 'hourly';
-            sessionPrice = bookingToEdit.sessionPrice ?? 69.69;
-            hourlyRate = bookingToEdit.hourlyRate ?? 19.91;
+            sessionPrice = bookingToEdit.sessionPrice ?? undefined;
+            hourlyRate = bookingToEdit.hourlyRate ?? undefined;
+            category = bookingToEdit.category ?? '';
         } else {
             const baseDate = selectedDate || new Date();
+            const initialLocId = selectedLocationId || locations[0]?.id;
+
             title = '';
-            locationId = selectedLocationId || locations[0]?.id;
+            locationId = initialLocId;
             renterId = undefined;
             oneOffRenterName = '';
             recurrence = 'none';
@@ -128,9 +144,10 @@
             endHour = 14;
             endMinute = 0;
             pricingType = 'session';
-            sessionPrice = 69.69;
-            hourlyRate = 19.91;
+            category = '';
             excludedDates = [];
+
+            applyLocationDefaults(initialLocId);
         }
     });
 
@@ -143,10 +160,10 @@
         }
 
         const payload: BookingInput = {
-            title: title || 'Untitled Booking',
-            locationId: locationId || selectedLocationId || locations[0]?.id || 0,
-            renterId: renterId || undefined,
-            oneOffRenterName: !renterId ? oneOffRenterName : undefined,
+            title: title.trim() || 'Untitled Booking',
+            locationId: Number(locationId || selectedLocationId || locations[0]?.id || 0),
+            renterId: renterId ? Number(renterId) : undefined,
+            oneOffRenterName: !renterId ? oneOffRenterName.trim() : undefined,
             startHour: Number(startHour),
             startMinute: Number(startMinute),
             endHour: Number(endHour),
@@ -154,11 +171,16 @@
             recurrence,
             dayOfWeek: finalDayOfWeek,
             date: recurrence === 'none' ? date : undefined,
-            category: recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event',
-            excludedDates: excludedDates.length > 0 ? excludedDates : undefined,
-            sessionPrice: pricingType === 'session' ? Number(sessionPrice) : undefined,
-            hourlyRate: pricingType === 'hourly' ? Number(hourlyRate) : undefined
+            category: category.trim() || (recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event'),
+            excludedDates: excludedDates.length > 0 ? $state.snapshot(excludedDates) : undefined,
+            sessionPrice: pricingType === 'session' && sessionPrice !== undefined ? Number(sessionPrice) : undefined,
+            hourlyRate: pricingType === 'hourly' && hourlyRate !== undefined ? Number(hourlyRate) : undefined
         };
+
+        if (!payload.renterId && !oneOffRenterName) {
+            alert.warn("Missing Renter", "This submission does not have a valid renter")
+            return
+        }
 
         if (bookingToEdit?.id) {
             onSave({ ...payload, id: bookingToEdit.id });
@@ -208,6 +230,7 @@
                         <select
                                 id="location-select"
                                 bind:value={locationId}
+                                onchange={() => applyLocationDefaults(locationId)}
                                 class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
                         >
                             {#each locations as loc}
@@ -341,7 +364,7 @@
                                     type="number"
                                     step="0.01"
                                     bind:value={sessionPrice}
-                                    placeholder="69.69"
+                                    placeholder="0.00"
                                     class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
@@ -353,7 +376,7 @@
                                     type="number"
                                     step="0.01"
                                     bind:value={hourlyRate}
-                                    placeholder="19.91"
+                                    placeholder="0.00"
                                     class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>

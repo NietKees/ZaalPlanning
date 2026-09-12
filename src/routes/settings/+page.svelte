@@ -80,33 +80,36 @@
     }
 </script>
 
-<div class="h-full w-full bg-surface flex justify-center items-center py-6">
-    <div class="max-w-2xl w-full bg-tertiary shadow-xl rounded-lg p-6 border-t-6 border-secondary">
-        <h2 class="text-lg font-bold text-slate-900 mb-4">Database Backup & Recovery</h2>
+<div class="h-full w-full bg-surface flex justify-center py-6">
+    <div class="py-6 max-w-2xl w-full gap-4 flex flex-col">
 
-        <div class="space-y-2 mb-6">
-            <label for="backup-dir" class="text-xs font-bold uppercase text-slate-500">
-                Backup Storage Directory
-            </label>
-            <div class="flex gap-2">
-                <input
-                        id="backup-dir"
-                        type="text"
-                        readonly
-                        value={backupDir || 'No folder selected'}
-                        class="flex-1 px-3 py-2 text-sm bg-slate-50 border rounded-md text-slate-600 focus:outline-none"
-                />
-                <Button variant="subtle" onclick={handleSelectDirectory}>Browse</Button>
+        <h2 class="text-lg font-bold text-slate-900 pb-4 border-b">Database Backup & Recovery</h2>
+        <div class=" bg-tertiary shadow-xl rounded-lg p-6 border-t-6 rounded-t-none border-secondary">
+            <div class="mb-6">
+                <label for="backup-dir" class="text-xs font-bold uppercase text-slate-500">
+                    Backup Storage Directory
+                </label>
+                <div class="flex gap-2">
+                    <input
+                            id="backup-dir"
+                            type="text"
+                            readonly
+                            value={backupDir || 'No folder selected'}
+                            class="flex-1 px-3 py-2 text-sm bg-slate-50 border rounded-md text-slate-600 focus:outline-none"
+                    />
+                    <Button variant="subtle" onclick={handleSelectDirectory}>Browse</Button>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <Button onclick={handleCreateBackup} disabled={!backupDir || isProcessing}>
+                    {isProcessing ? 'Working...' : 'Export Backup JSON'}
+                </Button>
+                <Button variant="subtle" onclick={handleRestoreBackup} disabled={isProcessing}>
+                    Import & Merge JSON
+                </Button>
             </div>
         </div>
-
-        <div class="flex gap-3">
-            <Button onclick={handleCreateBackup} disabled={!backupDir || isProcessing}>
-                {isProcessing ? 'Working...' : 'Export Backup JSON'}
-            </Button>
-            <Button variant="subtle" onclick={handleRestoreBackup} disabled={isProcessing}>
-                Import & Merge JSON
-            </Button>
-        </div>
     </div>
+
 </div>

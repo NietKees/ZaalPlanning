@@ -34,7 +34,24 @@ ipcMain.handle("bookings:getByRenterId", async (_event, renterId: number) => {
 });
 
 ipcMain.handle("bookings:create", async (_event, data: NewbookingTableschema) => {
-    return db.insert(bookingTable).values(data).returning().get();
+    try {
+        const createdBooking = db
+            .insert(bookingTable)
+            .values(data)
+            .returning()
+            .get();
+
+        return {
+            status: "success",
+            data: createdBooking
+        };
+    } catch (error) {
+        console.error("Failed to create booking:", error);
+        return {
+        status: "error",
+        error: error instanceof Error ? error.message : "An unexpected error occurred."
+        };
+    }
 });
 
 ipcMain.handle("bookings:update", async (_event, id: number, data: Partial<NewbookingTableschema>) => {

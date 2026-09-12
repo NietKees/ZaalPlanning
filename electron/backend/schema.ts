@@ -25,13 +25,13 @@ export const renterTable = sqliteTable("renterTable", {
 export const bookingTable = sqliteTable('bookingTable', {
     id: int('id').primaryKey({autoIncrement: true}),
     title: text('title').notNull(),
-    locationId: text('location_id')
+    locationId: int('location_id')
         .notNull()
         .references(() => locationTable.id, { onDelete: 'cascade' }),
     renterId: int('renter_id')
-        .notNull()
+        // .notNull()
         .references(() => renterTable.id, { onDelete: 'cascade' }),
-
+    oneOffRenterName: text('one_off_renter_name'),
     // Time slots
     startHour: int('start_hour').notNull(),
     startMinute: int('start_minute').notNull(),

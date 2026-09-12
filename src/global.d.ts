@@ -6,6 +6,7 @@ import type {
     bookingTableschema,
     NewbookingTableschema
 } from "./schema";
+import {ipcRenderer} from "electron";
 
 export {};
 
@@ -34,6 +35,9 @@ declare global {
                 update: (id: number, data: Partial<NewlocationTableschema>) => Promise<locationTableschema>;
                 delete: (id: number) => Promise<void>;
             };
+            invoicing: {
+                getInvoice: (id: number, range: {from:Date, to:Date}) => Promise<any>,
+            }
         };
         backupAPI: {
             selectDirectory: () => Promise<string | null>;

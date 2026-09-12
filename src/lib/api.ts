@@ -12,9 +12,12 @@ export async function getBookings(): Promise<Booking[]> {
     return window.api.bookings.getAll();
 }
 
-export async function getRenters(): Promise<Renter[]> {
-    
-    return window.api.renters.getAll();
+export async function getRenters(searchValue: string | undefined): Promise<Renter[]> {
+    if (!searchValue) {
+        return window.api.renters.getAll();
+    }else{
+        return window.api.renters.getAll({name: searchValue});
+    }
 }
 
 export async function addBooking(booking: BookingInput): Promise<Booking> {
@@ -58,6 +61,15 @@ export async function updateLocation(location: Location): Promise<Location> {
 export async function deleteLocation(id: number): Promise<void> {
     
     return window.api.locations.delete(id);
+}
+
+export async function getInvoice(renterId: number, from: Date, to: Date): Promise<any> {
+    const result = await window.api.invoicing.getInvoice(renterId, {
+        from,
+        to
+    });
+
+    return result;
 }
 
 

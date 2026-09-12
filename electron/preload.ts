@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld("api", {
         delete: (id: string) => ipcRenderer.invoke("bookings:delete", id)
     },
     renters: {
-        getAll: () => ipcRenderer.invoke("renters:getAll"),
+        getAll: (searchValue: {name: string}) => ipcRenderer.invoke("renters:getAll", searchValue),
         getById: (id: number) => ipcRenderer.invoke("renters:getById", id),
         create: (data: any) => ipcRenderer.invoke("renters:create", data),
         update: (id: number, data: Partial<any>) => ipcRenderer.invoke("renters:update", id, data),
@@ -28,7 +28,9 @@ contextBridge.exposeInMainWorld("api", {
         update: (id: number, data: Partial<any>) => ipcRenderer.invoke("locations:update", id, data),
         delete: (id: number) => ipcRenderer.invoke("locations:delete", id)
     },
-
+    invoicing: {
+        getInvoice: (id: number, range: {from:Date, to:Date}) => ipcRenderer.invoke("invoicing:getInvoice", id, range),
+    }
 });
 
 contextBridge.exposeInMainWorld('backupAPI', {

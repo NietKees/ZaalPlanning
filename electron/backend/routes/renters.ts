@@ -1,10 +1,25 @@
 import { ipcMain } from "electron";
-import { eq } from "drizzle-orm";
+import {and, eq, like, SQL} from "drizzle-orm";
 import { db } from "../db";
 import { renterTable, type NewrenterTableschema } from "../schema";
 
-ipcMain.handle("renters:getAll", async () => {
-    return db.select().from(renterTable).all();
+ipcMain.handle("renters:getAll", async (_event, searchValue) => {
+
+    if (!searchValue) {
+        return db.select().from(renterTable).orderBy(renterTable.name).all();
+    }else{
+        let filters: SQL[] = [];
+
+        if (searchValue.name){
+            filters.push(like(renterTable.name, `%${searchValue.name}%`));
+        }
+
+        return db.select()
+            .from(renterTable)
+            .where(and(...filters))
+            .orderBy(renterTable.name)
+            .all();
+    }
 });
 
 ipcMain.handle("renters:getById", async (_event, id: number) => {
