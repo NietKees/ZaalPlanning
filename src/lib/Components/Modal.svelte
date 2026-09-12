@@ -3,9 +3,11 @@
         Booking,
         BookingInput,
         Location,
+        RecurrencePattern,
         Renter,
     } from '$lib/types';
-    import {alert} from "$lib/utils/utils";
+    import { alert } from "$lib/utils/utils";
+    import {getPrice} from "$lib/api";
     let {
         isOpen = $bindable(false),
         bookingToEdit = null,
@@ -31,18 +33,26 @@
     let locationId = $state<number | undefined>();
     let renterId = $state<number | undefined>();
     let oneOffRenterName = $state<string>('');
-    let recurrence = $state<'none' | 'weekly'>('none');
-    let date = $state('');
+    let recurrence = $state<RecurrencePattern>('none');
+
+    // Dates
+    let singleDate = $state('');
+    let fromDate = $state('');
+    let toDate = $state('');
     let dayOfWeek = $state<number>(1);
+
+    // Time Slots
     let startHour = $state<number>(13);
     let startMinute = $state<number>(0);
     let endHour = $state<number>(14);
     let endMinute = $state<number>(0);
 
     // Pricing & Exclusion State
-    let pricingType = $state<'session' | 'hourly'>('session');
+    let overWritePricing = $state(false);
     let sessionPrice = $state<number | undefined>();
-    let hourlyRate = $state<number | undefined>();
+    let calculatedCost = $state<number | undefined>();
+    let isCalculatingPrice = $state(false);
+
     let category = $state<string>('');
     let excludedDates = $state<string[]>([]);
     let newExcludedDate = $state('');
@@ -70,9 +80,9 @@
         return new Date(year, month - 1, day);
     }
 
-    function handleDateChange(e: Event) {
+    function handleSingleDateChange(e: Event) {
         const value = (e.target as HTMLInputElement).value;
-        date = value;
+        singleDate = value;
         if (value) {
             dayOfWeek = parseLocalDate(value).getDay();
         }
@@ -93,22 +103,151 @@
     function applyLocationDefaults(targetLocationId?: number) {
         const loc = locations.find((l) => l.id === targetLocationId);
         if (loc) {
-            if (loc.sessionPrice !== undefined) sessionPrice = loc.sessionPrice;
-            if (loc.hourlyRate !== undefined) hourlyRate = loc.hourlyRate;
+            if (loc.flatSessionPrice != null) {
+                sessionPrice = loc.flatSessionPrice;
+            } else if (loc.hourlyRate != null) {
+                sessionPrice = loc.hourlyRate;
+            }
         }
     }
+
+    // Pricing engine taking location rates and tiered structure into account
+
+    // async function fetchUpdatedPricing(params: {
+    //     locationId?: number;
+    //     startHour: number;
+    //     startMinute: number;
+    //     endHour: number;
+    //     endMinute: number;
+    //     recurrence: RecurrencePattern;
+    //     singleDate?: string;
+    //     fromDate?: string;
+    //     toDate?: string;
+    //     excludedDates: string[];
+    //     overWritePricing: boolean;
+    //     fixedSessionPrice?: number;
+    // }) {
+    //     if (!params.locationId) return;
+    //
+    //     isCalculatingPrice = true;
+    //     try {
+    //         if (params.overWritePricing && params.fixedSessionPrice !== undefined) {
+    //             calculatedCost = params.fixedSessionPrice;
+    //         } else {
+    //             const loc = locations.find((l) => l.id === params.locationId);
+    //             const startMins = params.startHour * 60 + params.startMinute;
+    //             const endMins = params.endHour * 60 + params.endMinute;
+    //             const durationHours = Math.max(0, (endMins - startMins) / 60);
+    //
+    //             let sessionCount = 1;
+    //             if (params.recurrence === 'weekly' && params.fromDate && params.toDate) {
+    //                 const start = parseLocalDate(params.fromDate);
+    //                 const end = parseLocalDate(params.toDate);
+    //                 const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
+    //                 sessionCount = Math.max(1, Math.floor(diffDays / 7) + 1 - params.excludedDates.length);
+    //             }
+    //
+    //             let pricePerSession = 0;
+    //
+    //             if (loc) {
+    //                 const {
+    //                     hourlyRate,
+    //                     flatSessionPrice,
+    //                     extendedHourlyRate,
+    //                     shortSessionHourCap,
+    //                     fullSessionHourCap
+    //                 } = loc;
+    //
+    //                 if (
+    //                     flatSessionPrice != null &&
+    //                     fullSessionHourCap != null &&
+    //                     extendedHourlyRate != null &&
+    //                     durationHours > fullSessionHourCap
+    //                 ) {
+    //                     pricePerSession = flatSessionPrice + (durationHours - fullSessionHourCap) * extendedHourlyRate;
+    //                 } else if (
+    //                     flatSessionPrice != null &&
+    //                     shortSessionHourCap != null &&
+    //                     durationHours > shortSessionHourCap
+    //                 ) {
+    //                     pricePerSession = flatSessionPrice;
+    //                 } else if (hourlyRate != null) {
+    //                     pricePerSession = durationHours * hourlyRate;
+    //                 } else if (flatSessionPrice != null) {
+    //                     pricePerSession = flatSessionPrice;
+    //                 } else {
+    //                     pricePerSession = durationHours * 25;
+    //                 }
+    //             } else {
+    //                 pricePerSession = durationHours * 25;
+    //             }
+    //
+    //             calculatedCost = Math.max(0, pricePerSession * sessionCount);
+    //         }
+    //     } catch (err) {
+    //         console.error("Failed to calculate estimate:", err);
+    //     } finally {
+    //         isCalculatingPrice = false;
+    //     }
+    // }
+    async function fetchUpdatedPricing(
+            locationId: number | undefined,
+            startHour: number,
+            startMinute: number,
+            endHour: number,
+            endMinute: number){
+        if (!locationId) return;
+        isCalculatingPrice = true;
+        try{
+            const duration = endHour - startHour + (endMinute - startMinute) / 60;
+            const newPrice = await getPrice(duration, locationId);
+            if (newPrice === undefined) return;
+            sessionPrice = newPrice;
+            calculatedCost = sessionPrice
+        }catch (err) {
+            console.error("Failed to calculate estimate:", err);
+        } finally {
+            isCalculatingPrice = false;
+        }
+    }
+    // Effect to calculate prices on relevant field changes
+    $effect(() => {
+        if (!isOpen) return;
+        console.log(sessionPrice)
+        fetchUpdatedPricing(
+            locationId,
+            startHour,
+            startMinute,
+            endHour,
+            endMinute);
+        //     recurrence,
+        //     singleDate,
+        //     fromDate,
+        //     toDate,
+        //     excludedDates,
+        //     overWritePricing,
+        //     fixedSessionPrice: sessionPrice
+        // });
+    });
 
     // Reset or populate form when modal state changes
     $effect(() => {
         if (!isOpen) return;
 
+        const today = new Date();
+        const defaultToDate = new Date();
+        defaultToDate.setMonth(defaultToDate.getMonth() + 1);
+
         if (bookingToEdit) {
             title = bookingToEdit.title ?? '';
             locationId = bookingToEdit.locationId;
-            renterId = bookingToEdit.renterId;
+            renterId = bookingToEdit.renterId ?? undefined;
             oneOffRenterName = bookingToEdit.oneOffRenterName ?? '';
             recurrence = bookingToEdit.recurrence || 'none';
-            date = bookingToEdit.date || formatDateToLocalISO(new Date());
+
+            singleDate = bookingToEdit.date || formatDateToLocalISO(today);
+            fromDate = bookingToEdit.fromDate || formatDateToLocalISO(today);
+            toDate = bookingToEdit.toDate || formatDateToLocalISO(defaultToDate);
 
             if (bookingToEdit.dayOfWeek !== undefined && bookingToEdit.dayOfWeek !== null) {
                 dayOfWeek = bookingToEdit.dayOfWeek;
@@ -124,12 +263,11 @@
             endMinute = bookingToEdit.endMinute;
 
             excludedDates = bookingToEdit.excludedDates ? [...bookingToEdit.excludedDates] : [];
-            pricingType = bookingToEdit.sessionPrice !== undefined ? 'session' : 'hourly';
-            sessionPrice = bookingToEdit.sessionPrice ?? undefined;
-            hourlyRate = bookingToEdit.hourlyRate ?? undefined;
+            sessionPrice = bookingToEdit.priceOverride ?? undefined;
+            overWritePricing = bookingToEdit.priceOverride !== undefined && bookingToEdit.priceOverride !== null;
             category = bookingToEdit.category ?? '';
         } else {
-            const baseDate = selectedDate || new Date();
+            const baseDate = selectedDate || today;
             const initialLocId = selectedLocationId || locations[0]?.id;
 
             title = '';
@@ -137,15 +275,20 @@
             renterId = undefined;
             oneOffRenterName = '';
             recurrence = 'none';
-            date = formatDateToLocalISO(baseDate);
+
+            singleDate = formatDateToLocalISO(baseDate);
+            fromDate = formatDateToLocalISO(baseDate);
+            toDate = formatDateToLocalISO(defaultToDate);
             dayOfWeek = baseDate.getDay();
+
             startHour = 13;
             startMinute = 0;
             endHour = 14;
             endMinute = 0;
-            pricingType = 'session';
             category = '';
             excludedDates = [];
+            overWritePricing = false;
+            sessionPrice = undefined;
 
             applyLocationDefaults(initialLocId);
         }
@@ -155,8 +298,8 @@
         e.preventDefault();
 
         let finalDayOfWeek = Number(dayOfWeek);
-        if (recurrence === 'none' && date) {
-            finalDayOfWeek = parseLocalDate(date).getDay();
+        if (recurrence === 'none' && singleDate) {
+            finalDayOfWeek = parseLocalDate(singleDate).getDay();
         }
 
         const payload: BookingInput = {
@@ -170,16 +313,17 @@
             endMinute: Number(endMinute),
             recurrence,
             dayOfWeek: finalDayOfWeek,
-            date: recurrence === 'none' ? date : undefined,
+            date: recurrence === 'none' ? singleDate : undefined,
+            fromDate: recurrence === 'weekly' ? fromDate : undefined,
+            toDate: recurrence === 'weekly' ? toDate : undefined,
             category: category.trim() || (recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event'),
             excludedDates: excludedDates.length > 0 ? $state.snapshot(excludedDates) : undefined,
-            sessionPrice: pricingType === 'session' && sessionPrice !== undefined ? Number(sessionPrice) : undefined,
-            hourlyRate: pricingType === 'hourly' && hourlyRate !== undefined ? Number(hourlyRate) : undefined
+            priceOverride: overWritePricing && sessionPrice !== undefined ? Number(sessionPrice) : undefined
         };
 
         if (!payload.renterId && !oneOffRenterName) {
-            alert.warn("Missing Renter", "This submission does not have a valid renter")
-            return
+            alert.warn("Missing Renter", "This submission does not have a valid renter");
+            return;
         }
 
         if (bookingToEdit?.id) {
@@ -284,13 +428,37 @@
                             <input
                                     id="event-date"
                                     type="date"
-                                    value={date}
-                                    onchange={handleDateChange}
+                                    value={singleDate}
+                                    onchange={handleSingleDateChange}
                                     required
                                     class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
                     {:else}
+                        <div class="grid grid-cols-2 gap-3 pt-1">
+                            <div>
+                                <label for="from-date" class="mb-1 block text-xs font-bold text-text-on-surface">From Date</label>
+                                <input
+                                        id="from-date"
+                                        type="date"
+                                        bind:value={fromDate}
+                                        required
+                                        class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label for="to-date" class="mb-1 block text-xs font-bold text-text-on-surface">To Date</label>
+                                <input
+                                        id="to-date"
+                                        type="date"
+                                        bind:value={toDate}
+                                        required
+                                        class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+
                         <div class="pt-1">
                             <label for="day-of-week" class="mb-1 block text-xs font-bold text-text-on-surface">Repeats Every Week On</label>
                             <select
@@ -302,83 +470,6 @@
                                     <option value={day.value} class="text-text-on-surface">{day.label}</option>
                                 {/each}
                             </select>
-                        </div>
-                    {/if}
-                </div>
-
-                {#if recurrence === 'weekly'}
-                    <div class="space-y-2 rounded-lg border border-amber-200/50 bg-amber-50/20 p-3">
-                        <label for="exclude-date-input" class="block text-xs font-bold text-amber-900">Excluded Dates / Cancellations</label>
-                        <div class="flex gap-2">
-                            <input
-                                    id="exclude-date-input"
-                                    type="date"
-                                    bind:value={newExcludedDate}
-                                    class="rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <button
-                                    type="button"
-                                    onclick={addExclusion}
-                                    class="rounded-lg bg-amber-200/80 px-3 py-1 text-xs font-bold text-amber-900 hover:bg-amber-300 transition-colors cursor-pointer"
-                            >
-                                + Add Exception
-                            </button>
-                        </div>
-
-                        {#if excludedDates.length > 0}
-                            <div class="flex flex-wrap gap-1.5 pt-1">
-                                {#each excludedDates as dateStr}
-                                    <span class="inline-flex items-center gap-1 rounded bg-red-100/80 px-2 py-0.5 text-[11px] font-mono font-bold text-red-800 border border-red-200">
-                                        {dateStr}
-                                        <button
-                                                type="button"
-                                                onclick={() => removeExclusion(dateStr)}
-                                                class="font-bold hover:text-red-950 ml-1 cursor-pointer"
-                                        >✕</button>
-                                    </span>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                {/if}
-
-                <div class="space-y-3 rounded-lg border border-border bg-surface/50 p-3">
-                    <span class="block font-bold text-text-on-surface">Tariff & Pricing</span>
-
-                    <div class="flex items-center gap-4">
-                        <label class="flex items-center gap-2 text-xs font-semibold text-text-on-surface cursor-pointer">
-                            <input type="radio" name="pricingType" value="session" bind:group={pricingType} />
-                            Fixed per Session
-                        </label>
-                        <label class="flex items-center gap-2 text-xs font-semibold text-text-on-surface cursor-pointer">
-                            <input type="radio" name="pricingType" value="hourly" bind:group={pricingType} />
-                            Hourly Rate
-                        </label>
-                    </div>
-
-                    {#if pricingType === 'session'}
-                        <div>
-                            <label for="session-price-input" class="mb-1 block text-xs font-bold text-text-on-surface">Session Price (€)</label>
-                            <input
-                                    id="session-price-input"
-                                    type="number"
-                                    step="0.01"
-                                    bind:value={sessionPrice}
-                                    placeholder="0.00"
-                                    class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                        </div>
-                    {:else}
-                        <div>
-                            <label for="hourly-rate-input" class="mb-1 block text-xs font-bold text-text-on-surface">Hourly Rate (€/hr)</label>
-                            <input
-                                    id="hourly-rate-input"
-                                    type="number"
-                                    step="0.01"
-                                    bind:value={hourlyRate}
-                                    placeholder="0.00"
-                                    class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
                         </div>
                     {/if}
                 </div>
@@ -430,6 +521,79 @@
                                     class="w-1/2 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
+                    </div>
+                </div>
+
+                {#if recurrence === 'weekly'}
+                    <div class="space-y-2 rounded-lg border border-amber-200/50 bg-amber-50/20 p-3">
+                        <label for="exclude-date-input" class="block text-xs font-bold text-amber-900">Excluded Dates / Cancellations</label>
+                        <div class="flex gap-2">
+                            <input
+                                    id="exclude-date-input"
+                                    type="date"
+                                    bind:value={newExcludedDate}
+                                    class="rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                            <button
+                                    type="button"
+                                    onclick={addExclusion}
+                                    class="rounded-lg bg-amber-200/80 px-3 py-1 text-xs font-bold text-amber-900 hover:bg-amber-300 transition-colors cursor-pointer"
+                            >
+                                + Add Exception
+                            </button>
+                        </div>
+
+                        {#if excludedDates.length > 0}
+                            <div class="flex flex-wrap gap-1.5 pt-1">
+                                {#each excludedDates as dateStr}
+                                    <span class="inline-flex items-center gap-1 rounded bg-red-100/80 px-2 py-0.5 text-[11px] font-mono font-bold text-red-800 border border-red-200">
+                                        {dateStr}
+                                        <button
+                                                type="button"
+                                                onclick={() => removeExclusion(dateStr)}
+                                                class="font-bold hover:text-red-950 ml-1 cursor-pointer"
+                                        >✕</button>
+                                    </span>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+
+                <div class="space-y-3 rounded-lg border border-border bg-surface/50 p-3">
+                    <div class="flex justify-between items-center">
+                        <span class="block font-bold text-text-on-surface">Tariff & Price</span>
+                        <label class="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
+                            <input type="checkbox" bind:checked={overWritePricing} />
+                            Override Rate
+                        </label>
+                    </div>
+
+                    {#if overWritePricing}
+                        <div>
+                            <label for="session-price-input" class="mb-1 block text-xs font-bold text-text-on-surface">Fixed Price (€)</label>
+                            <input
+                                    id="session-price-input"
+                                    type="number"
+                                    step="0.01"
+                                    bind:value={sessionPrice}
+                                    placeholder="0.00"
+                                    class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                        </div>
+                    {/if}
+
+                    <div class="flex justify-between items-center pt-2 border-t border-border">
+                        <span class="text-xs font-medium text-text-muted">Estimated Cost:</span>
+                        <span class="font-bold text-base text-blue-600">
+                            {#if isCalculatingPrice}
+                                Calculating...
+                            {:else if calculatedCost !== undefined}
+                                €{calculatedCost.toFixed(2)}
+                            {:else}
+                                —
+                            {/if}
+                        </span>
                     </div>
                 </div>
 

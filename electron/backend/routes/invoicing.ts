@@ -1,12 +1,10 @@
-import type {bookingTableschema, locationTableschema, NewbookingTableschema, } from "../schema";
+import type {BookingSchema, LocationSchema} from "../schema";
 import {ipcMain} from "electron";
 import { bookingTable, locationTable, renterTable} from "../schema";
 import { db } from "../db"; // Adjust path to your Drizzle DB instance
 import { gte, lte, and, eq } from "drizzle-orm";
 import {getPrice} from "../dataProcessing";
 import createPlugin from "tailwindcss/plugin";
-import withOptions = createPlugin.withOptions;
-
 
 
 ipcMain.handle("invoicing:getInvoice", async (_event, id, timeFrame: { from: Date; to: Date }) => {
@@ -45,7 +43,7 @@ ipcMain.handle("invoicing:getInvoice", async (_event, id, timeFrame: { from: Dat
 });
 
 export function countBookingOccurrences(
-    booking: bookingTableschema,
+    booking: BookingSchema,
     from: Date,
     to: Date
 ): number {
@@ -247,3 +245,23 @@ export function countBookingOccurrences(
 //
 //     return diffInMinutes / 60;
 // }
+
+ipcMain.handle("invoicing:getPrice", async (_event, duration, locationId) => {
+   try{
+       const location: LocationSchema | undefined = db.select().from(locationTable).where(eq(locationId, locationTable.id)).get();
+       if (location === undefined) return {status: 404, error: "location not found"}
+
+       const price = getPrice(duration, location);
+
+       return {
+           status: "success",
+           statusCode: 200,
+           data: price
+       }
+   } catch (e) {
+       return {
+           statusCode: 500,
+           error: e
+       }
+   }
+});

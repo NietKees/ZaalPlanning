@@ -1,11 +1,11 @@
-import type {locationTableschema} from "./schema";
+import type {LocationSchema} from "./schema";
 
-export function getPrice(hours: number, location: locationTableschema): number {
+export function getPrice(hours: number, location: LocationSchema): number {
     if (!location || hours <=0) return 0;
 
     let price = 0;
 
-    if (hours <= 3.5){
+    if (hours <= (location.shortSessionHourCap ?? 3.5)){
         price = hours * (location.hourlyRate ?? 19.91);
     }
     else if(hours <= 4){
@@ -14,8 +14,8 @@ export function getPrice(hours: number, location: locationTableschema): number {
     else if(hours <= 8){
         price = location.flatSessionPrice ?? 130;
     }
-    else if(hours > 8){
-        price = (location.flatSessionPrice ?? 130) + (hours % 8) * 12.50;
+    else if(hours > (location.fullSessionHourCap ?? 8)){
+        price = (location.flatSessionPrice ?? 130) + (hours % 8) * (location.extendedHourlyRate ?? 12.50);
     }
     return Math.round(price * 100) / 100;
 }
