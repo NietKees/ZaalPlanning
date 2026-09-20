@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld("api", {
         update: (id: number, data: Partial<any>) => ipcRenderer.invoke("renters:update", id, data),
         delete: (id: number) => ipcRenderer.invoke("renters:delete", id)
     },
+    renterGroups: {
+        getAll: () => ipcRenderer.invoke("renterGroups:getAll"),
+        getById: (id: number) => ipcRenderer.invoke("renterGroups:getById", id),
+        create: (data: any) => ipcRenderer.invoke("renterGroups:create", data),
+        update: (id: number, data: any) => ipcRenderer.invoke("renterGroups:update", id, data),
+        delete: (id: number) => ipcRenderer.invoke("renterGroups:delete", id)
+    },
     locations: {
         getAll: () => ipcRenderer.invoke("locations:getAll"),
         getById: (id: number) => ipcRenderer.invoke("locations:getById", id),

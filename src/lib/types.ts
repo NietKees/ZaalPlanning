@@ -27,8 +27,17 @@ export interface Renter {
     name: string;
     email: string;
     phone?: string;
+    groupId?: number;
 }
 export type CreateRenterInput = Omit<Renter, 'id'>;
+
+export type RenterGroup = {
+    id: number;
+    name: string;
+    groupId?: number | null;
+};
+
+export type CreateRenterGroupInput = Omit<RenterGroup, 'id'>
 
 export type RecurrencePattern = 'none' | 'weekly';
 

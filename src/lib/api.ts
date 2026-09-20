@@ -1,5 +1,13 @@
 import { browser } from '$app/environment';
-import type {Booking, BookingInput, CreateLocationInput, CreateRenterInput, Location, Renter} from '$lib/types';
+import type {
+    Booking,
+    BookingInput,
+    CreateLocationInput, CreateRenterGroupInput,
+    CreateRenterInput,
+    Location,
+    Renter,
+    RenterGroup
+} from '$lib/types';
 import type {NewrenterTableschema} from "../../electron/backend/schema";
 
 export async function getLocations(): Promise<Location[]> {
@@ -60,6 +68,30 @@ export async function deleteLocation(id: number): Promise<void> {
     return window.api.locations.delete(id);
 }
 
+export async function getRenterGroups(): Promise<RenterGroup[]> {
+    return window.api.renterGroups.getAll();
+}
+
+export async function getRenterGroupById(id: number): Promise<RenterGroup> {
+    return window.api.renterGroups.getById(id);
+}
+
+export async function createRenterGroup(data: CreateRenterGroupInput): Promise<RenterGroup> {
+    return window.api.renterGroups.create(data);
+}
+
+export async function updateRenterGroup(id: number, data: Partial<RenterGroup>): Promise<RenterGroup> {
+    return window.api.renterGroups.update(id, data);
+}
+
+export async function deleteRenterGroup(id: number): Promise<void> {
+    return window.api.renterGroups.delete(id);
+}
+
+// Subgroup helper using standard update endpoint
+export async function updateGroupParent(subgroupId: number, parentGroupId: number | null): Promise<RenterGroup> {
+    return window.api.renterGroups.update(subgroupId, { groupId: parentGroupId });
+}
 
 export async function getFullDatabaseDump() {
     const res = await window.backupAPI.getDump();

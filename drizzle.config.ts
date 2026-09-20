@@ -5,6 +5,6 @@ export default defineConfig({
     schema: "./electron/backend/schema.ts",
     dialect: "sqlite",
     dbCredentials: {
-        url: "file:./database.db",
+        url: "./database.db",
     },
 });

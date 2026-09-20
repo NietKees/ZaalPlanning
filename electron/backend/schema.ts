@@ -1,4 +1,4 @@
-import {int, real, sqliteTable, text} from "drizzle-orm/sqlite-core";
+import {type AnySQLiteColumn, int, real, sqliteTable, text} from "drizzle-orm/sqlite-core";
 import { relations, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 
 
@@ -20,7 +20,17 @@ export const renterTable = sqliteTable("renterTable", {
     id: int().primaryKey({ autoIncrement: true }),
     name: text("Renter").notNull(),
     email: text("Email").notNull(),
+    groupId: int("groupId").references(() => renterGroupTable.id, { onDelete: "set null" }),
 })
+
+export const renterGroupTable = sqliteTable("renterGroup", {
+    id: int().primaryKey({ autoIncrement: true }),
+    name: text("GroupName").notNull(),
+    groupId: int("groupId").references((): AnySQLiteColumn => renterGroupTable.id,
+        { onDelete: "set null" }),
+    // renterGroup: int("groupId").references(() => renterGroupTable.id, { onDelete: "set null" }),
+
+});
 
 export const bookingTable = sqliteTable('bookingTable', {
     id: int('id').primaryKey({autoIncrement: true}),
@@ -55,14 +65,39 @@ export const bookingTable = sqliteTable('bookingTable', {
 // ------------------------------------------------------------------
 // RELATIONS
 // ------------------------------------------------------------------
+export const renterGroupRelations = relations(renterGroupTable, ({ one, many }) => ({
+    // 1. Direct members in this group
+    renters: many(renterTable),
+
+    // 2. Self-referencing parent group
+    parentGroup: one(renterGroupTable, {
+        fields: [renterGroupTable.groupId],
+        references: [renterGroupTable.id],
+        relationName: 'parent_child_groups',
+    }),
+
+    // 3. Self-referencing sub-groups
+    subGroups: many(renterGroupTable, {
+        relationName: 'parent_child_groups',
+    }),
+}));
+
+export const renterTableRelations = relations(renterTable, ({ one, many }) => ({
+    // Fixed: Added relation link to renterGroupTable
+    group: one(renterGroupTable, {
+        fields: [renterTable.groupId],
+        references: [renterGroupTable.id],
+    }),
+    bookingTable: many(bookingTable),
+}));
 
 export const locationTableRelations = relations(locationTable, ({ many }) => ({
     bookingTable: many(bookingTable)
 }));
-
-export const renterTableRelations = relations(renterTable, ({ many }) => ({
-    bookingTable: many(bookingTable)
-}));
+//
+// export const renterTableRelations = relations(renterTable, ({ many }) => ({
+//     bookingTable: many(bookingTable)
+// }));
 
 export const bookingTableRelations = relations(bookingTable, ({ one }) => ({
     location: one(locationTable, {
@@ -89,3 +124,6 @@ export type NewrenterTableschema = InferInsertModel<typeof renterTable>;
 
 export type bookingTableschema = InferSelectModel<typeof bookingTable>;
 export type NewbookingTableschema = InferInsertModel<typeof bookingTable>;
+
+export type renterGroupTableschema = InferSelectModel<typeof renterGroupTable>;
+export type NewrenterGroupTableschema = InferInsertModel<typeof renterGroupTable>;

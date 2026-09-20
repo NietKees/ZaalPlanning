@@ -27,6 +27,13 @@ declare global {
                 update: (id: number, data: Partial<NewrenterTableschema>) => Promise<renterTableschema>;
                 delete: (id: number) => Promise<void>;
             };
+            renterGroups: {
+                getAll: () => Promise<RenterGroup[]>;
+                getById: (id: number) => Promise<RenterGroup>;
+                create: (data: CreateRenterGroupInput) => Promise<RenterGroup>;
+                update: (id: number, data: Partial<RenterGroup>) => Promise<RenterGroup>;
+                delete: (id: number) => Promise<void>;
+            };
             locations: {
                 getAll: () => Promise<locationTableschema[]>;
                 getById: (id: number) => Promise<locationTableschema | undefined>;

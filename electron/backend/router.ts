@@ -1,4 +1,5 @@
 import "./routes/bookings"
 import "./routes/locations"
 import "./routes/renters"
+import "./routes/renterGroup"
 import "./routes/backup"

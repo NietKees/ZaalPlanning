@@ -6,6 +6,7 @@
     import Button from "$lib/Components/Button.svelte";
     import type {NewrenterTableschema} from "../../../electron/backend/schema";
     import {alert} from "$lib/utils/utils";
+    import RenterGrouping from "$lib/Components/RenterGrouping.svelte";
 
     let { data }: { data: PageData } = $props();
     let renters: Renter[] = $derived(data.renters)
@@ -20,6 +21,7 @@
     // ]);
 
     let isModalOpen = $state(false);
+    let isGrouping = $state(false);
     let editingRenterId = $state<number | undefined>();
 
     let nameInput = $state('');
@@ -30,6 +32,13 @@
         nameInput = '';
         emailInput = '';
         isModalOpen = true;
+    }
+
+    function openGrouping() {
+        editingRenterId = undefined;
+        nameInput = '';
+        emailInput = '';
+        isGrouping = true;
     }
 
     function openEditModal(renter: Renter) {
@@ -85,6 +94,7 @@
 <!--                <p class="text-xs text-text-muted mt-1">Manage registered organizations and contact details.</p>-->
             </div>
             <div class="gap-4 flex">
+                <Button onclick={openGrouping}>Manage groups</Button>
                 <Button onclick={openCreateModal}>Add New Client</Button>
             </div>
         </div>
@@ -243,3 +253,6 @@
         </div>
     </div>
 {/if}
+
+
+<RenterGrouping bind:isOpen={isGrouping}/>
