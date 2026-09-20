@@ -100,16 +100,16 @@
             </a>
         </nav>
 
-        <div class="space-y-2 border-t border-border p-4">
-            <div class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Quick Actions</div>
-            <button
-                    onclick={handleExportMonthlyOverview}
-                    class="flex w-full items-center justify-between rounded-md border border-border bg-surface/5 px-3 py-2 text-xs font-medium text-text-on-background transition-colors hover:border-secondary hover:bg-surface/10 cursor-pointer"
-            >
-                <span>Export Overview</span>
-                <span class="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-text-on-secondary font-bold">PDF/Print</span>
-            </button>
-        </div>
+<!--        <div class="space-y-2 border-t border-border p-4">-->
+<!--            <div class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Quick Actions</div>-->
+<!--            <button-->
+<!--                    onclick={handleExportMonthlyOverview}-->
+<!--                    class="flex w-full items-center justify-between rounded-md border border-border bg-surface/5 px-3 py-2 text-xs font-medium text-text-on-background transition-colors hover:border-secondary hover:bg-surface/10 cursor-pointer"-->
+<!--            >-->
+<!--                <span>Export Overview</span>-->
+<!--                <span class="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-text-on-secondary font-bold">PDF/Print</span>-->
+<!--            </button>-->
+<!--        </div>-->
     </aside>
 
     <div class="flex flex-1 flex-col overflow-hidden">
