@@ -47,42 +47,76 @@ export function countBookingOccurrences(
     from: Date,
     to: Date
 ): number {
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-
-    // Normalize time components for accurate date comparisons
-    fromDate.setHours(0, 0, 0, 0);
-    toDate.setHours(23, 59, 59, 999);
+    // 1. Normalize query range boundaries
+    const queryFrom = new Date(from);
+    const queryTo = new Date(to);
+    queryFrom.setHours(0, 0, 0, 0);
+    queryTo.setHours(23, 59, 59, 999);
 
     const excludedSet = new Set(booking.excludedDates ?? []);
 
-    // 1. Single non-recurring booking
+    // Local ISO date formatting helper (YYYY-MM-DD) to avoid UTC shift errors
+    const toLocalISODate = (d: Date): string => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const parseLocalDate = (dateStr: string): Date => {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    };
+
+    // --- Single Event Handling ---
     if (booking.recurrence === "none") {
         if (!booking.date) return 0;
 
-        const singleDate = new Date(booking.date);
-        singleDate.setHours(0, 0, 0, 0);
+        const eventDate = parseLocalDate(booking.date);
+        eventDate.setHours(0, 0, 0, 0);
 
-        const isInRange = singleDate >= fromDate && singleDate <= toDate;
+        const isInQueryRange = eventDate >= queryFrom && eventDate <= queryTo;
         const isExcluded = excludedSet.has(booking.date);
 
-        return isInRange && !isExcluded ? 1 : 0;
+        return isInQueryRange && !isExcluded ? 1 : 0;
     }
 
-    // 2. Weekly recurring booking
+    // --- Weekly Recurring Handling ---
     if (booking.recurrence === "weekly" && booking.dayOfWeek !== null) {
-        let count = 0;
-        const current = new Date(fromDate);
+        // Clamp starting boundary to whichever is later: queryFrom OR booking.fromDate
+        const effectiveFrom = new Date(queryFrom);
+        if (booking.fromDate) {
+            const bFrom = parseLocalDate(booking.fromDate);
+            bFrom.setHours(0, 0, 0, 0);
+            if (bFrom > effectiveFrom) {
+                effectiveFrom.setTime(bFrom.getTime());
+            }
+        }
 
-        // 1. Jump directly to the first matching day of the week
+        // Clamp ending boundary to whichever is earlier: queryTo OR booking.toDate
+        const effectiveTo = new Date(queryTo);
+        if (booking.toDate) {
+            const bTo = parseLocalDate(booking.toDate);
+            bTo.setHours(23, 59, 59, 999);
+            if (bTo < effectiveTo) {
+                effectiveTo.setTime(bTo.getTime());
+            }
+        }
+
+        // If boundaries do not overlap, no occurrences exist
+        if (effectiveFrom > effectiveTo) return 0;
+
+        let count = 0;
+        const current = new Date(effectiveFrom);
+
+        // Advance to the first target day of the week on or after effectiveFrom
         const dayOffset = (booking.dayOfWeek - current.getDay() + 7) % 7;
         current.setDate(current.getDate() + dayOffset);
 
-        // 2. Step forward by 7 days at a time
-        while (current <= toDate) {
-            const dateStr = current.toISOString().split("T")[0];
+        // Iterate weekly through the effective range
+        while (current <= effectiveTo) {
+            const dateStr = toLocalISODate(current);
 
-            // Only count if it's NOT in excludedDates
             if (!excludedSet.has(dateStr)) {
                 count++;
             }
