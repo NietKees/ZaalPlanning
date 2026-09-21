@@ -202,7 +202,7 @@
 <!-- Combined Add / Edit Modal -->
 {#if isModalOpen}
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-        <div class="w-full max-w-md space-y-5 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-2xl">
+        <div class="w-full max-w-md space-y-5 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-2xl transition-all duration-300 starting:scale-[75%] starting:opacity-0">
             <div class="flex items-center justify-between border-b border-border pb-3">
                 <h3 class="text-xl font-bold">
                     {editingRenterId ? 'Edit Client Profile' : 'Add New Client Profile'}

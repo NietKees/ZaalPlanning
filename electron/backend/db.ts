@@ -5,32 +5,37 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { app } from "electron";
 import * as schema from "./schema";
-// Rebuild Node globals for ESM (fixes __filename error)
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let dbPath: string;
 const isDev = !app.isPackaged;
-if (isDev) {
-    // Running directly from source
-    dbPath = path.join(process.cwd(), "database.db");
-} else {
-    // Packaged app: DB is copied into `resources/database.db`
-    const bundledDB = path.join(process.resourcesPath, "database.db");
+let dbPath: string;
 
-    // But it must run from userData to be writeable
+if (isDev) {
+    dbPath = path.join(process.cwd(), "database.db");
+
+    // DEV MODE: Delete local DB on dev launch to always start fresh (optional)
+    // if (fs.existsSync(dbPath)) {
+    //     fs.unlinkSync(dbPath);
+    // }
+} else {
+    const bundledDB = path.join(process.resourcesPath, "database.db");
     const userDataDB = path.join(app.getPath("userData"), "database.db");
 
-    // First run after install → copy DB out of asar into userData
-    if (!fs.existsSync(userDataDB)) {
-        fs.copyFileSync(bundledDB, userDataDB);
+    // Force copy the fresh bundled template over the old userData file on boot
+    try {
+        if (fs.existsSync(bundledDB)) {
+            fs.copyFileSync(bundledDB, userDataDB);
+            console.log("🔄 Overwrote userData database with fresh bundled database.");
+        }
+    } catch (err) {
+        console.error("❌ Failed to copy bundled database template:", err);
     }
 
     dbPath = userDataDB;
 }
 
-console.log("💾 SQLite DB Path:", dbPath);
-// Add this helper to find the .node file
 const nativeBindingPath = app.isPackaged
     ? path.join(
         process.resourcesPath,
@@ -38,9 +43,9 @@ const nativeBindingPath = app.isPackaged
     )
     : undefined;
 
-// Update your sqlite initialization
+// IMPORTANT: Instantiation must happen AFTER the fs.copyFileSync step above
 const sqlite = new Database(dbPath, {
     nativeBinding: nativeBindingPath,
 });
-// const sqlite = new Database(dbPath);
-export const db = drizzle(sqlite, {schema});
+
+export const db = drizzle(sqlite, { schema });

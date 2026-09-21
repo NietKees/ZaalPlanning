@@ -159,7 +159,7 @@
 <!-- Add / Edit Location Modal -->
 {#if isModalOpen}
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
-        <div class="w-full max-w-lg space-y-5 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-2xl my-8">
+        <div class="w-full max-w-lg space-y-5 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-2xl my-8 transition-all duration-300 starting:scale-[75%] starting:opacity-0">
             <div class="flex items-center justify-between border-b border-border pb-3">
                 <h3 class="text-xl font-bold">
                     {editingLocationId ? 'Edit Location' : 'Add New Location'}

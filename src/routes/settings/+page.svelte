@@ -5,7 +5,7 @@
     import type { PageData } from './$types';
 
     let { data }: { data: PageData } = $props();
-
+    const version = $derived(data.version)
     let backupDir = $derived<string>(data.backupDir || '');
     let isProcessing = $state(false);
 
@@ -82,7 +82,6 @@
 
 <div class="h-full w-full bg-surface flex justify-center py-6">
     <div class="py-6 max-w-2xl w-full gap-4 flex flex-col">
-
         <h2 class="text-lg font-bold text-slate-900 pb-4 border-b">Database Backup & Recovery</h2>
         <div class=" bg-tertiary shadow-xl rounded-lg p-6 border-t-6 rounded-t-none border-secondary">
             <div class="mb-6">
@@ -110,6 +109,8 @@
                 </Button>
             </div>
         </div>
+        <span class="text-xs text-text-muted font-mono">v{version}</span>
+
     </div>
 
 </div>

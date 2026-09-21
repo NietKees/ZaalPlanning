@@ -9,11 +9,14 @@ export const load: PageLoad = async () => {
                 backupDir: res.data
             };
         }
+
+
     } catch (err) {
         console.error('Failed to load backup directory in +page.ts:', err);
     }
-
+    const version = await window.api.getAppVersion();
     return {
-        backupDir: ''
+        backupDir: '',
+        version
     };
 };

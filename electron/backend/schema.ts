@@ -1,4 +1,4 @@
-import {int, real, sqliteTable, text} from "drizzle-orm/sqlite-core";
+import {type AnySQLiteColumn, int, real, sqliteTable, text} from "drizzle-orm/sqlite-core";
 import { relations, type InferSelectModel, type InferInsertModel } from 'drizzle-orm';
 
 // ------------------------------------------------------------------
@@ -26,7 +26,7 @@ export const locationTable = sqliteTable("locationTable", {
 export const renterTable = sqliteTable("renterTable", {
     id: int().primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
-    email: text("email").notNull()
+    email: text("email").notNull(),
     groupId: int("groupId").references(() => renterGroupTable.id, { onDelete: "set null" }),
 })
 
@@ -104,9 +104,9 @@ export const locationTableRelations = relations(locationTable, ({ many }) => ({
     bookings: many(bookingTable)
 }));
 
-export const renterTableRelations = relations(renterTable, ({ many }) => ({
-    bookings: many(bookingTable)
-}));
+// export const renterTableRelations = relations(renterTable, ({ many }) => ({
+//     bookings: many(bookingTable)
+// }));
 
 export const bookingTableRelations = relations(bookingTable, ({ one }) => ({
     location: one(locationTable, {

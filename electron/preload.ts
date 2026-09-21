@@ -38,7 +38,8 @@ contextBridge.exposeInMainWorld("api", {
     invoicing: {
         getInvoice: (id: number, range: { from: Date; to: Date }) => ipcRenderer.invoke("invoicing:getInvoice", id, range),
         getPrice: (duration: number, locationId: number) => ipcRenderer.invoke("invoicing:getPrice", duration, locationId)
-    }
+    },
+    getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });
 
 contextBridge.exposeInMainWorld("backupAPI", {

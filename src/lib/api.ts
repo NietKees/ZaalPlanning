@@ -8,9 +8,7 @@ import type {
     Renter,
     RenterGroup
 } from '$lib/types';
-import type {NewrenterTableschema} from "../../electron/backend/schema";
-// import type { Booking, BookingInput, CreateLocationInput, CreateRenterInput, Location, Renter } from '$lib/types';
-import type { NewRenterSchema } from "../../electron/backend/schema";
+import type {NewRenterSchema} from "../../electron/backend/schema";
 
 export async function getLocations(): Promise<Location[]> {
 

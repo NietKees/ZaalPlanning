@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, net } from "electron";
+import {app, BrowserWindow, protocol, net, ipcMain} from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import started from "electron-squirrel-startup";
@@ -87,4 +87,9 @@ app.on("activate", () => {
 
 app.whenReady().then(() => {
   initBackupScheduler();
+});
+
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });

@@ -345,7 +345,7 @@
 
 {#if isOpen}
     <div class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-        <div class="w-full max-w-lg space-y-4 rounded-xl border border-border bg-surface text-text-on-surface p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div class="w-full max-w-lg space-y-4 rounded-xl border border-border bg-surface text-text-on-surface p-6 shadow-xl max-h-[90vh] overflow-y-auto transition-all duration-300 starting:scale-[75%] starting:opacity-0">
             <div class="flex items-center justify-between border-b border-border pb-3">
                 <h3 class="text-lg font-bold text-text-on-surface">
                     {bookingToEdit ? 'Edit Booking Slot' : 'New Booking Slot'}
