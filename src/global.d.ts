@@ -1,44 +1,63 @@
 import type {
-    locationTableschema,
-    NewlocationTableschema,
-    renterTableschema,
-    NewrenterTableschema,
-    bookingTableschema,
-    NewbookingTableschema
+    LocationSchema,
+    NewLocationSchema,
+    RenterSchema,
+    NewRenterSchema,
+    BookingSchema,
+    NewBookingSchema
 } from "./schema";
 
-export {};
+export type IpcStatus = "success" | "error" | "not-found";
+
+export interface IpcResponse<T = unknown> {
+    status: IpcStatus;
+    data?: T;
+    error?: string;
+}
 
 declare global {
     interface Window {
         api: {
             bookings: {
-                getAll: () => Promise<(bookingTableschema & { location: locationTableschema; renter: renterTableschema })[]>;
-                getById: (id: number) => Promise<(bookingTableschema & { location: locationTableschema; renter: renterTableschema }) | undefined>;
-                getByRenterId: (renterId: number) => Promise<(bookingTableschema & { location: locationTableschema; renter: renterTableschema })[]>;
-                create: (data: NewbookingTableschema) => Promise<bookingTableschema>;
-                update: (id: number, data: Partial<NewbookingTableschema>) => Promise<bookingTableschema>;
-                delete: (id: number) => Promise<void>;
+                getAll: () => Promise<(BookingSchema & { location: LocationSchema; renter: RenterSchema | null })[]>;
+                getById: (id: number) => Promise<(BookingSchema & { location: LocationSchema; renter: RenterSchema | null }) | undefined>;
+                getByRenterId: (renterId: number) => Promise<(BookingSchema & { location: LocationSchema; renter: RenterSchema | null })[]>;
+                create: (data: NewBookingSchema) => Promise<IpcResponse<BookingSchema>>;
+                update: (id: number, data: Partial<NewBookingSchema>) => Promise<IpcResponse<BookingSchema>>;
+                delete: (id: number) => Promise<IpcResponse<void>>;
             };
             renters: {
-                getAll: () => Promise<renterTableschema[]>;
-                getById: (id: number) => Promise<renterTableschema | undefined>;
-                create: (data: NewrenterTableschema) => Promise<renterTableschema>;
-                update: (id: number, data: Partial<NewrenterTableschema>) => Promise<renterTableschema>;
+                getAll: (searchValue?: { name?: string }) => Promise<RenterSchema[]>;
+                getById: (id: number) => Promise<RenterSchema | undefined>;
+                create: (data: NewRenterSchema) => Promise<RenterSchema>;
+                update: (id: number, data: Partial<NewRenterSchema>) => Promise<RenterSchema>;
+                delete: (id: number) => Promise<void>;
+            };
+            renterGroups: {
+                getAll: () => Promise<RenterGroup[]>;
+                getById: (id: number) => Promise<RenterGroup>;
+                create: (data: CreateRenterGroupInput) => Promise<RenterGroup>;
+                update: (id: number, data: Partial<RenterGroup>) => Promise<RenterGroup>;
                 delete: (id: number) => Promise<void>;
             };
             locations: {
-                getAll: () => Promise<locationTableschema[]>;
-                getById: (id: number) => Promise<locationTableschema | undefined>;
-                create: (data: NewlocationTableschema) => Promise<locationTableschema>;
-                update: (id: number, data: Partial<NewlocationTableschema>) => Promise<locationTableschema>;
+                getAll: () => Promise<LocationSchema[]>;
+                getById: (id: number) => Promise<LocationSchema | undefined>;
+                create: (data: NewLocationSchema) => Promise<LocationSchema>;
+                update: (id: number, data: Partial<NewLocationSchema>) => Promise<LocationSchema>;
                 delete: (id: number) => Promise<void>;
+            };
+            invoicing: {
+                getInvoice: (id: number, range: { from: Date; to: Date }) => Promise<any>;
+                getPrice: (duration: number, locationId: number) => Promise<IpcResponse>
             };
         };
         backupAPI: {
+            getDump: () => Promise<IpcResponse<any>>;
+            getSavePath: () => Promise<string>;
             selectDirectory: () => Promise<string | null>;
-            saveBackup: (targetDir: string, payload: unknown) => Promise<string>;
-            restoreBackup: () => Promise<unknown | null>;
+            saveBackup: (customPath?: string) => Promise<IpcResponse<string>>;
+            restoreBackup: () => Promise<IpcResponse<unknown> | null>;
         };
     }
 }

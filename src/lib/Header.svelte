@@ -15,7 +15,7 @@
         <div class="flex items-center gap-3">
             <button
                     onclick={toggleSidebar}
-                    class="rounded-md border border-border bg-primary p-2 text-text-on-background! transition-colors hover:bg-primary/30"
+                    class="rounded-md border border-border bg-primary/5 p-2 text-text-on-background! transition-colors hover:bg-primary/30"
                     aria-label="Open Navigation Menu"
             >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -34,11 +34,11 @@
             {#if headerSnippet}
                 {@render headerSnippet()}
             {:else}
-                <div class="flex justify-end w-full">
-                    <button onclick={() => window.print()} class="rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold">
-                        Print / Export
-                    </button>
-                </div>
+<!--                <div class="flex justify-end w-full">-->
+<!--                    <button onclick={() => window.print()} class="rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold">-->
+<!--                        Print / Export-->
+<!--                    </button>-->
+<!--                </div>-->
             {/if}
         </div>
     </header>
