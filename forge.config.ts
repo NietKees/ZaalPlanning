@@ -17,6 +17,7 @@ const modulesToCopy = [
 
 const config: ForgeConfig = {
   packagerConfig: {
+    icon: "src/lib/SchubertLogo2_transparent_icon",
     asar: {
       unpack: `**/node_modules/{${modulesToCopy.join(',')}}/**/*`,
     },

@@ -3,7 +3,7 @@
   "productName": "Zaal Planner",
   "description": "Administratie voor zaalplanning in de vereniging",
   "private": true,
-  "version": "0.0.8",
+  "version": "0.0.16",
   "type": "module",
   "main": ".vite/build/main.js",
   "author": {

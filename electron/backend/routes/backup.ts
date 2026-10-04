@@ -2,7 +2,7 @@ import { ipcMain, dialog } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import { eq } from 'drizzle-orm';
-import { db } from "../db";
+import { sqlite, db } from "../db";
 import { renterTable, bookingTable, locationTable, settingsTable } from "../schema";
 import type { IpcResponse } from "../../../src/lib/types";
 
@@ -218,35 +218,45 @@ ipcMain.handle("restoreBackup", async (): Promise<IpcResponse<boolean>> => {
         const dump = JSON.parse(fileContent);
         const payload = dump.data || dump;
 
-        // Atomic restore directly on the main thread SQLite instance
-        db.transaction((tx) => {
-            if (Array.isArray(payload.locations)) {
-                for (const loc of payload.locations) {
-                    tx.insert(locationTable)
-                        .values(loc)
-                        .onConflictDoUpdate({ target: locationTable.id, set: loc })
-                        .run();
-                }
-            }
+        // 1. Disable FK checks outside the transaction
+        sqlite.pragma('foreign_keys = OFF');
 
-            if (Array.isArray(payload.renters)) {
-                for (const renter of payload.renters) {
-                    tx.insert(renterTable)
-                        .values(renter)
-                        .onConflictDoUpdate({ target: renterTable.id, set: renter })
-                        .run();
+        try {
+            db.transaction((tx) => {
+                if (Array.isArray(payload.locations)) {
+                    for (const loc of payload.locations) {
+                        const { id, ...setFields } = loc;
+                        tx.insert(locationTable)
+                            .values(loc)
+                            .onConflictDoUpdate({ target: locationTable.id, set: setFields })
+                            .run();
+                    }
                 }
-            }
 
-            if (Array.isArray(payload.bookings)) {
-                for (const booking of payload.bookings) {
-                    tx.insert(bookingTable)
-                        .values(booking)
-                        .onConflictDoUpdate({ target: bookingTable.id, set: booking })
-                        .run();
+                if (Array.isArray(payload.renters)) {
+                    for (const renter of payload.renters) {
+                        const { id, ...setFields } = renter;
+                        tx.insert(renterTable)
+                            .values(renter)
+                            .onConflictDoUpdate({ target: renterTable.id, set: setFields })
+                            .run();
+                    }
                 }
-            }
-        });
+
+                if (Array.isArray(payload.bookings)) {
+                    for (const booking of payload.bookings) {
+                        const { id, ...setFields } = booking;
+                        tx.insert(bookingTable)
+                            .values(booking)
+                            .onConflictDoUpdate({ target: bookingTable.id, set: setFields })
+                            .run();
+                    }
+                }
+            });
+        } finally {
+            // 2. Re-enable FK checks after execution completes
+            sqlite.pragma('foreign_keys = ON');
+        }
 
         return { status: "success", data: true };
     } catch (err: any) {

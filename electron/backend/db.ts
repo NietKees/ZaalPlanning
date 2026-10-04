@@ -14,20 +14,15 @@ let dbPath: string;
 
 if (isDev) {
     dbPath = path.join(process.cwd(), "database.db");
-
-    // DEV MODE: Delete local DB on dev launch to always start fresh (optional)
-    // if (fs.existsSync(dbPath)) {
-    //     fs.unlinkSync(dbPath);
-    // }
 } else {
     const bundledDB = path.join(process.resourcesPath, "database.db");
     const userDataDB = path.join(app.getPath("userData"), "database.db");
 
-    // Force copy the fresh bundled template over the old userData file on boot
+    // Copy the bundled database template ONLY if the user database doesn't exist yet (first boot after install)
     try {
-        if (fs.existsSync(bundledDB)) {
+        if (fs.existsSync(bundledDB) && !fs.existsSync(userDataDB)) {
             fs.copyFileSync(bundledDB, userDataDB);
-            console.log("🔄 Overwrote userData database with fresh bundled database.");
+            console.log("✅ Initialized user database from bundled template.");
         }
     } catch (err) {
         console.error("❌ Failed to copy bundled database template:", err);
@@ -43,8 +38,7 @@ const nativeBindingPath = app.isPackaged
     )
     : undefined;
 
-// IMPORTANT: Instantiation must happen AFTER the fs.copyFileSync step above
-const sqlite = new Database(dbPath, {
+export const sqlite = new Database(dbPath, {
     nativeBinding: nativeBindingPath,
 });
 
