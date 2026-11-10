@@ -3,17 +3,15 @@ import {ipcMain} from "electron";
 import { bookingTable, locationTable, renterTable} from "../schema";
 import { db } from "../db"; // Adjust path to your Drizzle DB instance
 import { gte, lte, and, eq } from "drizzle-orm";
-import {getPrice} from "../dataProcessing";
+import { getPrice } from "../dataProcessing";
+import { calculateBookingInvoice, countBookingOccurrences } from "../invoiceCalculations";
 import createPlugin from "tailwindcss/plugin";
 
+export { countBookingOccurrences } from "../invoiceCalculations";
 
 ipcMain.handle("invoicing:getInvoice", async (_event, id, timeFrame: { from: Date; to: Date }) => {
     const fromDate = new Date(timeFrame.from);
     const toDate = new Date(timeFrame.to);
-    let all_cost = 0;
-    //GET Bookings from date to Date
-
-    //  get all bookings from renter
     const all_bookings = db.select({
             bookingTable,
             locationTable,
@@ -22,113 +20,14 @@ ipcMain.handle("invoicing:getInvoice", async (_event, id, timeFrame: { from: Dat
     ).innerJoin(locationTable, eq(bookingTable.locationId, locationTable.id)
     ).where(eq(bookingTable.renterId, id)).all();
 
-    let bookingAmounts: {amount: number, cost: number  }[] = [];
-    all_bookings.forEach(b => {
-        const booking = b.bookingTable;
-        const location = b.locationTable;
-        const occurrences = countBookingOccurrences(booking, fromDate, toDate);
-
-
-
-        const bookingHours = booking.endHour - booking.startHour;
-        const bookingMinutes = booking.endMinute - booking.startMinute;
-        const duration = bookingHours + bookingMinutes / 60;
-
-        const cost = getPrice(duration, location);
-
-        bookingAmounts.push({ amount: occurrences, cost:cost });
-        all_cost += cost * occurrences;
-    })
-    return {all_bookings, bookingAmounts, all_cost};
+    let all_cost = 0;
+    const bookingAmounts = all_bookings.map(({ bookingTable: booking, locationTable: location }) => {
+        const invoice = calculateBookingInvoice(booking, location, fromDate, toDate);
+        all_cost += invoice.subtotal;
+        return { amount: invoice.amount, cost: invoice.cost };
+    });
+    return {all_bookings, bookingAmounts, all_cost: Math.round((all_cost + Number.EPSILON) * 100) / 100};
 });
-
-export function countBookingOccurrences(
-    booking: BookingSchema,
-    from: Date,
-    to: Date
-): number {
-    // 1. Normalize query range boundaries
-    const queryFrom = new Date(from);
-    const queryTo = new Date(to);
-    queryFrom.setHours(0, 0, 0, 0);
-    queryTo.setHours(23, 59, 59, 999);
-
-    const excludedSet = new Set(booking.excludedDates ?? []);
-
-    // Local ISO date formatting helper (YYYY-MM-DD) to avoid UTC shift errors
-    const toLocalISODate = (d: Date): string => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    const parseLocalDate = (dateStr: string): Date => {
-        const [year, month, day] = dateStr.split('-').map(Number);
-        return new Date(year, month - 1, day);
-    };
-
-    // --- Single Event Handling ---
-    if (booking.recurrence === "none") {
-        if (!booking.date) return 0;
-
-        const eventDate = parseLocalDate(booking.date);
-        eventDate.setHours(0, 0, 0, 0);
-
-        const isInQueryRange = eventDate >= queryFrom && eventDate <= queryTo;
-        const isExcluded = excludedSet.has(booking.date);
-
-        return isInQueryRange && !isExcluded ? 1 : 0;
-    }
-
-    // --- Weekly Recurring Handling ---
-    if (booking.recurrence === "weekly" && booking.dayOfWeek !== null) {
-        // Clamp starting boundary to whichever is later: queryFrom OR booking.fromDate
-        const effectiveFrom = new Date(queryFrom);
-        if (booking.fromDate) {
-            const bFrom = parseLocalDate(booking.fromDate);
-            bFrom.setHours(0, 0, 0, 0);
-            if (bFrom > effectiveFrom) {
-                effectiveFrom.setTime(bFrom.getTime());
-            }
-        }
-
-        // Clamp ending boundary to whichever is earlier: queryTo OR booking.toDate
-        const effectiveTo = new Date(queryTo);
-        if (booking.toDate) {
-            const bTo = parseLocalDate(booking.toDate);
-            bTo.setHours(23, 59, 59, 999);
-            if (bTo < effectiveTo) {
-                effectiveTo.setTime(bTo.getTime());
-            }
-        }
-
-        // If boundaries do not overlap, no occurrences exist
-        if (effectiveFrom > effectiveTo) return 0;
-
-        let count = 0;
-        const current = new Date(effectiveFrom);
-
-        // Advance to the first target day of the week on or after effectiveFrom
-        const dayOffset = (booking.dayOfWeek - current.getDay() + 7) % 7;
-        current.setDate(current.getDate() + dayOffset);
-
-        // Iterate weekly through the effective range
-        while (current <= effectiveTo) {
-            const dateStr = toLocalISODate(current);
-
-            if (!excludedSet.has(dateStr)) {
-                count++;
-            }
-
-            current.setDate(current.getDate() + 7);
-        }
-
-        return count;
-    }
-
-    return 0;
-}
 
 // export function getBookingOccurrences(
 //     booking: bookingTableschema,

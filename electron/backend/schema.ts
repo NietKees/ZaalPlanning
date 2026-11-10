@@ -46,7 +46,6 @@ export const bookingTable = sqliteTable('bookingTable', {
         .notNull()
         .references(() => locationTable.id, { onDelete: 'cascade' }),
     renterId: int('renter_id')
-        .notNull()
         .references(() => renterTable.id, { onDelete: 'cascade' }),
     oneOffRenterName: text('one_off_renter_name'),
 

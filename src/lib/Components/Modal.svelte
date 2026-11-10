@@ -15,6 +15,7 @@
         renters = [],
         selectedLocationId,
         selectedDate = new Date(),
+        selectedStartTime = '13:00',
         onSave,
         onDelete
     }: {
@@ -24,7 +25,8 @@
         renters: Renter[];
         selectedLocationId?: number;
         selectedDate?: Date;
-        onSave: (booking: Booking | BookingInput) => void;
+        selectedStartTime?: string;
+        onSave: (booking: Booking | BookingInput) => Promise<boolean | void> | boolean | void;
         onDelete?: (id: number) => void;
     } = $props();
 
@@ -42,16 +44,20 @@
     let dayOfWeek = $state<number>(1);
 
     // Time Slots
-    let startHour = $state<number>(13);
-    let startMinute = $state<number>(0);
-    let endHour = $state<number>(14);
-    let endMinute = $state<number>(0);
+    let startTime = $state('13:00');
+    let endTime = $state('14:00');
+    let startHour = $derived(Number(startTime.split(':')[0]));
+    let startMinute = $derived(Number(startTime.split(':')[1]));
+    let endHour = $derived(Number(endTime.split(':')[0]));
+    let endMinute = $derived(Number(endTime.split(':')[1]));
 
     // Pricing & Exclusion State
     let overWritePricing = $state(false);
     let sessionPrice = $state<number | undefined>();
     let calculatedCost = $state<number | undefined>();
     let isCalculatingPrice = $state(false);
+    let pricingRequest = 0;
+    let isSaving = $state(false);
 
     let category = $state<string>('');
     let excludedDates = $state<string[]>([]);
@@ -109,6 +115,14 @@
                 sessionPrice = loc.hourlyRate;
             }
         }
+    }
+
+    function handleOverrideChange(event: Event) {
+        const enabled = (event.currentTarget as HTMLInputElement).checked;
+        if (enabled && sessionPrice === undefined && calculatedCost !== undefined) {
+            sessionPrice = calculatedCost;
+        }
+        overWritePricing = enabled;
     }
 
     // Pricing engine taking location rates and tiered structure into account
@@ -195,31 +209,54 @@
             startHour: number,
             startMinute: number,
             endHour: number,
-            endMinute: number){
-        if (!locationId) return;
+            endMinute: number,
+            requestId: number) {
+        if (!locationId) {
+            calculatedCost = undefined;
+            isCalculatingPrice = false;
+            return;
+        }
         isCalculatingPrice = true;
         try{
-            const duration = endHour - startHour + (endMinute - startMinute) / 60;
+            const startTotal = startHour * 60 + startMinute;
+            let endTotal = endHour * 60 + endMinute;
+            if (endTotal <= startTotal) endTotal += 24 * 60;
+            const duration = (endTotal - startTotal) / 60;
             const newPrice = await getPrice(duration, locationId);
-            if (newPrice === undefined) return;
-            sessionPrice = newPrice;
-            calculatedCost = sessionPrice
+            if (requestId !== pricingRequest) return;
+            if (newPrice === undefined) {
+                calculatedCost = undefined;
+                return;
+            }
+            calculatedCost = newPrice;
         }catch (err) {
-            console.error("Failed to calculate estimate:", err);
+            if (requestId === pricingRequest) {
+                console.error("Failed to calculate estimate:", err);
+                calculatedCost = undefined;
+            }
         } finally {
-            isCalculatingPrice = false;
+            if (requestId === pricingRequest) isCalculatingPrice = false;
         }
     }
     // Effect to calculate prices on relevant field changes
     $effect(() => {
-        if (!isOpen) return;
-        console.log(sessionPrice)
+        const requestId = ++pricingRequest;
+        if (!isOpen || overWritePricing) {
+            isCalculatingPrice = false;
+            return;
+        }
+        if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+            calculatedCost = undefined;
+            isCalculatingPrice = false;
+            return;
+        }
         fetchUpdatedPricing(
             locationId,
             startHour,
             startMinute,
             endHour,
-            endMinute);
+            endMinute,
+            requestId);
         //     recurrence,
         //     singleDate,
         //     fromDate,
@@ -257,10 +294,8 @@
                 dayOfWeek = 1;
             }
 
-            startHour = bookingToEdit.startHour;
-            startMinute = bookingToEdit.startMinute;
-            endHour = bookingToEdit.endHour;
-            endMinute = bookingToEdit.endMinute;
+            startTime = formatTime(bookingToEdit.startHour, bookingToEdit.startMinute);
+            endTime = formatTime(bookingToEdit.endHour, bookingToEdit.endMinute);
 
             excludedDates = bookingToEdit.excludedDates ? [...bookingToEdit.excludedDates] : [];
             sessionPrice = bookingToEdit.priceOverride ?? undefined;
@@ -281,10 +316,10 @@
             toDate = formatDateToLocalISO(defaultToDate);
             dayOfWeek = baseDate.getDay();
 
-            startHour = 13;
-            startMinute = 0;
-            endHour = 14;
-            endMinute = 0;
+            startTime = selectedStartTime;
+            const [selectedHour, selectedMinute] = selectedStartTime.split(':').map(Number);
+            const endMinutes = Math.min(selectedHour * 60 + selectedMinute + 60, 24 * 60);
+            endTime = formatTime(Math.floor(endMinutes / 60) % 24, endMinutes % 60);
             category = '';
             excludedDates = [];
             overWritePricing = false;
@@ -294,8 +329,33 @@
         }
     });
 
-    function handleSubmit(e: SubmitEvent) {
+    function formatTime(hour: number, minute: number): string {
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+
+    async function handleSubmit(e: SubmitEvent) {
         e.preventDefault();
+        if (isSaving) return;
+        if (!startTime || !endTime) {
+            alert.warn('Missing time', 'Choose both a start and end time.');
+            return;
+        }
+        if (startTime === endTime) {
+            alert.warn('Invalid time range', 'The start and end times cannot be the same.');
+            return;
+        }
+        if (endTime < startTime && endTime !== '00:00') {
+            alert.warn('Invalid time range', 'The end time must be after the start time. Use 00:00 to end at midnight the next day.');
+            return;
+        }
+        if (overWritePricing && (sessionPrice === undefined || !Number.isFinite(Number(sessionPrice)) || Number(sessionPrice) < 0)) {
+            alert.warn('Invalid price', 'Enter a valid fixed price of zero or more.');
+            return;
+        }
+        if (recurrence === 'weekly' && fromDate && toDate && fromDate > toDate) {
+            alert.warn('Invalid date range', 'The recurring booking end date must be on or after its start date.');
+            return;
+        }
 
         let finalDayOfWeek = Number(dayOfWeek);
         if (recurrence === 'none' && singleDate) {
@@ -318,7 +378,7 @@
             toDate: recurrence === 'weekly' ? toDate : undefined,
             category: category.trim() || (recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event'),
             excludedDates: excludedDates.length > 0 ? $state.snapshot(excludedDates) : undefined,
-            priceOverride: overWritePricing && sessionPrice !== undefined ? Number(sessionPrice) : undefined
+            priceOverride: overWritePricing && sessionPrice !== undefined ? Number(sessionPrice) : null
         };
 
         if (!payload.renterId && !oneOffRenterName) {
@@ -326,13 +386,18 @@
             return;
         }
 
-        if (bookingToEdit?.id) {
-            onSave({ ...payload, id: bookingToEdit.id });
-        } else {
-            onSave(payload);
+        isSaving = true;
+        try {
+            const result = bookingToEdit?.id
+                ? await onSave({ ...payload, id: bookingToEdit.id })
+                : await onSave(payload);
+            if (result !== false) isOpen = false;
+        } catch (error) {
+            console.error('Failed to save booking:', error);
+            await alert.error('Booking Error', error instanceof Error ? error.message : 'Failed to save booking.');
+        } finally {
+            isSaving = false;
         }
-
-        isOpen = false;
     }
 
     function handleDelete() {
@@ -341,11 +406,25 @@
             isOpen = false;
         }
     }
+
+    function handleWindowKeydown(event: KeyboardEvent) {
+        if (event.key === 'Escape' && isOpen) {
+            isOpen = false;
+        }
+    }
 </script>
 
+<svelte:window onkeydown={handleWindowKeydown} />
+
 {#if isOpen}
-    <div class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-        <div class="w-full max-w-lg space-y-4 rounded-xl border border-border bg-surface text-text-on-surface p-6 shadow-xl max-h-[90vh] overflow-y-auto transition-all duration-300 starting:scale-[75%] starting:opacity-0">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <button
+                type="button"
+                class="absolute inset-0 cursor-default backdrop-blur-xs bg-slate-900/40"
+                aria-label="Close booking modal"
+                onclick={() => (isOpen = false)}
+        ></button>
+        <div class="relative z-10 w-full max-w-lg space-y-4 rounded-xl border border-border bg-surface text-text-on-surface p-6 shadow-xl max-h-[90vh] overflow-y-auto transition-all duration-300 starting:scale-[75%] starting:opacity-0">
             <div class="flex items-center justify-between border-b border-border pb-3">
                 <h3 class="text-lg font-bold text-text-on-surface">
                     {bookingToEdit ? 'Edit Booking Slot' : 'New Booking Slot'}
@@ -385,13 +464,13 @@
                 </div>
 
                 <div class="space-y-2">
-                    <label for="renter-select" class="block font-bold text-text-on-surface">Client / Renter Profile</label>
+                    <label for="renter-select" class="block font-bold text-text-on-surface">Renter</label>
                     <select
                             id="renter-select"
                             bind:value={renterId}
                             class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
                     >
-                        <option value={undefined} class="text-text-on-surface">-- One-time / Unassigned Renter --</option>
+                        <option value={undefined} class="text-text-on-surface">One-time renter (not saved as a client)</option>
                         {#each renters as renter}
                             <option value={renter.id} class="text-text-on-surface">{renter.name} ({renter.email})</option>
                         {/each}
@@ -399,11 +478,16 @@
 
                     {#if !renterId}
                         <input
+                                id="one-off-renter-name"
                                 type="text"
                                 bind:value={oneOffRenterName}
-                                placeholder="Custom Renter/Org Name"
+                                required
+                                autocomplete="name"
+                                aria-label="One-time renter name"
+                                placeholder="Enter the renter or organization name"
                                 class="w-full rounded-lg border border-border bg-surface/50 px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
+                        <p class="text-xs text-text-muted">This name is stored only with this booking and won't create a client profile.</p>
                     {/if}
                 </div>
 
@@ -477,52 +561,33 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label for="start-hour" class="mb-1 block font-bold text-text-on-surface">Start Time</label>
-                        <div class="flex gap-1">
+                        <div class="flex items-center gap-2">
                             <input
                                     id="start-hour"
-                                    type="number"
-                                    min="0"
-                                    max="23"
-                                    bind:value={startHour}
+                                    type="time"
+                                    step="60"
+                                    bind:value={startTime}
                                     required
-                                    class="w-1/2 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <input
-                                    type="number"
-                                    min="0"
-                                    max="59"
-                                    step="15"
-                                    bind:value={startMinute}
-                                    required
-                                    class="w-1/2 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-center font-mono text-lg text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
                     </div>
 
                     <div>
                         <label for="end-hour" class="mb-1 block font-bold text-text-on-surface">End Time</label>
-                        <div class="flex gap-1">
+                        <div class="flex items-center gap-2">
                             <input
                                     id="end-hour"
-                                    type="number"
-                                    min="0"
-                                    max="23"
-                                    bind:value={endHour}
+                                    type="time"
+                                    step="60"
+                                    bind:value={endTime}
                                     required
-                                    class="w-1/2 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <input
-                                    type="number"
-                                    min="0"
-                                    max="59"
-                                    step="15"
-                                    bind:value={endMinute}
-                                    required
-                                    class="w-1/2 rounded-lg border border-border bg-surface px-2 py-1.5 text-center text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-center font-mono text-lg text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
                     </div>
                 </div>
+                <p class="-mt-2 text-xs text-text-muted">Times can be selected by the minute. Set the end time to 00:00 to end at midnight the next day.</p>
 
                 {#if recurrence === 'weekly'}
                     <div class="space-y-2 rounded-lg border border-amber-200/50 bg-amber-50/20 p-3">
@@ -564,7 +629,7 @@
                     <div class="flex justify-between items-center">
                         <span class="block font-bold text-text-on-surface">Tariff & Price</span>
                         <label class="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
-                            <input type="checkbox" bind:checked={overWritePricing} />
+                            <input type="checkbox" checked={overWritePricing} onchange={handleOverrideChange} />
                             Override Rate
                         </label>
                     </div>
@@ -575,9 +640,11 @@
                             <input
                                     id="session-price-input"
                                     type="number"
+                                    min="0"
                                     step="0.01"
                                     bind:value={sessionPrice}
                                     placeholder="0.00"
+                                    required
                                     class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-text-on-surface focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                         </div>
@@ -588,6 +655,12 @@
                         <span class="font-bold text-base text-blue-600">
                             {#if isCalculatingPrice}
                                 Calculating...
+                            {:else if overWritePricing}
+                                {#if sessionPrice !== undefined}
+                                    €{Number(sessionPrice).toFixed(2)}
+                                {:else}
+                                    —
+                                {/if}
                             {:else if calculatedCost !== undefined}
                                 €{calculatedCost.toFixed(2)}
                             {:else}
@@ -620,9 +693,10 @@
                         </button>
                         <button
                                 type="submit"
-                                class="rounded-lg bg-blue-600 px-4 py-1.5 font-bold text-white hover:bg-blue-700 transition-colors cursor-pointer"
+                            disabled={isSaving}
+                            class="rounded-lg bg-blue-600 px-4 py-1.5 font-bold text-white hover:bg-blue-700 transition-colors cursor-pointer"
                         >
-                            {bookingToEdit ? 'Update Booking' : 'Save Booking'}
+                        {isSaving ? 'Saving...' : bookingToEdit ? 'Update Booking' : 'Save Booking'}
                         </button>
                     </div>
                 </div>

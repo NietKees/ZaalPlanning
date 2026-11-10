@@ -6,42 +6,63 @@
     import { getContext, type Snippet } from "svelte";
     import { invalidateAll } from "$app/navigation";
     import {alert} from "$lib/utils/utils"
-    import { toPng } from 'html-to-image';
-    import { jsPDF } from 'jspdf';
+    import { downloadAgendaPdf } from '$lib/utils/agendaPdf';
 
-    async function exportToPDF() {
-        const element = document.querySelector('.printable-view') as HTMLElement | null;
-        if (!element) return;
+    function csvCell(value: string | number): string {
+        let text = String(value);
+        if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+        return `"${text.replace(/"/g, '""')}"`;
+    }
 
-        try {
-            const dataUrl = await toPng(element, {
-                pixelRatio: 2,
-                filter: (node) => !(node instanceof HTMLElement && node.classList.contains('no-print'))
-            });
+    function exportToCSV() {
+        const exportDays = viewMode === 'month'
+            ? monthGrid.filter((cell) => cell.isCurrentMonth).map((cell) => cell.date)
+            : weekDays;
+        const rows: (string | number)[][] = [
+            ['Date', 'Day', 'Start Time', 'End Time', 'Booking', 'Renter', 'Venue', 'Repeats Weekly', 'Price Override (€)']
+        ];
 
-            const pdf = new jsPDF({
-                orientation: 'landscape',
-                unit: 'mm',
-                format: 'a4'
-            });
-
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const margin = 5;
-
-            const imgProps = pdf.getImageProperties(dataUrl);
-            const maxWidth = pdfWidth - (margin * 2);
-            const maxHeight = pdfHeight - (margin * 2);
-
-            const ratio = Math.min(maxWidth / imgProps.width, maxHeight / imgProps.height);
-            const renderWidth = imgProps.width * ratio;
-            const renderHeight = imgProps.height * ratio;
-
-            pdf.addImage(dataUrl, 'PNG', margin, margin, renderWidth, renderHeight);
-            pdf.save(`schedule-${headerLabel.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`);
-        } catch (err) {
-            console.error('PDF Export failed:', err);
+        for (const day of exportDays) {
+            for (const booking of getBookingsForDay(day)) {
+                rows.push([
+                    toLocalDateString(day),
+                    day.toLocaleDateString('en-US', { weekday: 'long' }),
+                    `${String(booking.startHour).padStart(2, '0')}:${String(booking.startMinute).padStart(2, '0')}`,
+                    `${String(booking.endHour).padStart(2, '0')}:${String(booking.endMinute).padStart(2, '0')}`,
+                    booking.title,
+                    getRenterLabel(booking),
+                    booking.location?.name || selectedLocation?.name || '',
+                    booking.recurrence === 'weekly' ? 'Yes' : 'No',
+                    booking.priceOverride ?? ''
+                ]);
+            }
         }
+
+        const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `schedule-${headerLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function exportAgendaPDF() {
+        downloadAgendaPdf({
+            viewMode,
+            headerLabel,
+            locationName: selectedLocation?.name,
+            activeColor,
+            monthGrid,
+            weekDays,
+            getBookingsForDay,
+            getRenterLabel,
+            startHourGrid,
+            endHourGrid
+        });
     }
 
     let {
@@ -78,8 +99,11 @@
 
     // Modal State
     let isModalOpen = $state(false);
+    let isDayOverviewOpen = $state(false);
     let selectedBookingToEdit = $state<Booking | null>(null);
     let selectedDateForModal = $state<Date>(new Date());
+    let selectedStartTime = $state('13:00');
+    let selectedOverviewDate = $state<Date>(new Date());
 
     // THEME HELPERS
     let selectedLocation = $derived(
@@ -204,8 +228,86 @@
         });
     }
 
+    function bookingOccursOn(booking: Booking | BookingInput, date: Date): boolean {
+        const dateString = toLocalDateString(date);
+        if (booking.excludedDates?.includes(dateString)) return false;
+        if (booking.recurrence === 'weekly') {
+            if (booking.dayOfWeek !== date.getDay()) return false;
+            if (booking.fromDate && dateString < booking.fromDate) return false;
+            if (booking.toDate && dateString > booking.toDate) return false;
+            return true;
+        }
+        return booking.date === dateString;
+    }
+
+    function dateOrdinal(dateString: string): number {
+        const [year, month, day] = dateString.split('-').map(Number);
+        return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+    }
+
+    function hasBookingOverlap(candidate: Booking | BookingInput): { booking: Booking; date: string } | undefined {
+        const candidateStart = candidate.recurrence === 'weekly'
+            ? candidate.fromDate || toLocalDateString(new Date())
+            : candidate.date;
+        if (!candidateStart) return undefined;
+
+        const knownEndDates = bookings
+            .flatMap((booking) => booking.recurrence === 'weekly'
+                ? [booking.toDate]
+                : [booking.date])
+            .filter((date): date is string => Boolean(date))
+            .sort();
+        const lastKnownEnd = knownEndDates[knownEndDates.length - 1];
+        const fallbackEnd = lastKnownEnd && lastKnownEnd >= candidateStart
+            ? lastKnownEnd
+            : (() => {
+            const date = new Date(`${candidateStart}T00:00:00`);
+            date.setFullYear(date.getFullYear() + 1);
+            return toLocalDateString(date);
+        })();
+        const candidateEnd = candidate.recurrence === 'weekly'
+            ? candidate.toDate || fallbackEnd
+            : candidate.date;
+        if (!candidateEnd) return undefined;
+
+        const candidateStartMinutes = candidate.startHour * 60 + candidate.startMinute;
+        let candidateEndMinutes = candidate.endHour * 60 + candidate.endMinute;
+        if (candidateEndMinutes <= candidateStartMinutes) candidateEndMinutes += 24 * 60;
+
+        const firstDate = new Date(`${candidateStart}T00:00:00`);
+        const lastOrdinal = dateOrdinal(candidateEnd);
+        for (const date = new Date(firstDate); dateOrdinal(toLocalDateString(date)) <= lastOrdinal; date.setDate(date.getDate() + 1)) {
+            if (!bookingOccursOn(candidate, date)) continue;
+
+            const candidateIntervalStart = dateOrdinal(toLocalDateString(date)) * 1440 + candidateStartMinutes;
+            const candidateIntervalEnd = candidateIntervalStart + candidateEndMinutes - candidateStartMinutes;
+
+            for (const dayOffset of [-1, 0, 1]) {
+                const otherDate = new Date(date);
+                otherDate.setDate(otherDate.getDate() + dayOffset);
+                for (const existing of bookings) {
+                    if (existing.id === ('id' in candidate ? candidate.id : undefined)) continue;
+                    if (existing.locationId !== candidate.locationId) continue;
+                    if (!bookingOccursOn(existing, otherDate)) continue;
+
+                    const existingStartMinutes = existing.startHour * 60 + existing.startMinute;
+                    let existingEndMinutes = existing.endHour * 60 + existing.endMinute;
+                    if (existingEndMinutes <= existingStartMinutes) existingEndMinutes += 24 * 60;
+                    const existingIntervalStart = dateOrdinal(toLocalDateString(otherDate)) * 1440 + existingStartMinutes;
+                    const existingIntervalEnd = existingIntervalStart + existingEndMinutes - existingStartMinutes;
+
+                    if (candidateIntervalStart < existingIntervalEnd && existingIntervalStart < candidateIntervalEnd) {
+                        return { booking: existing, date: toLocalDateString(otherDate) };
+                    }
+                }
+            }
+        }
+        return undefined;
+    }
+
     function getRenterLabel(booking: Booking): string {
         if (booking.renter?.name) return booking.renter.name;
+        if (booking.oneOffRenterName) return booking.oneOffRenterName;
         if (booking.renterId) {
             const r = renters.find(renter => renter.id === booking.renterId);
             if (r) return r.name;
@@ -243,24 +345,55 @@
         currentDate = next;
     }
 
-    function selectDateAndSwitchToWeek(d: Date) {
-        currentDate = new Date(d);
-        viewMode = 'week';
+    function openDayOverview(d: Date) {
+        selectedOverviewDate = new Date(d);
+        isDayOverviewOpen = true;
     }
 
-    function openCreateModal(targetDate: Date = currentDate) {
+    function handleWindowKeydown(event: KeyboardEvent) {
+        if (event.key === 'Escape' && isDayOverviewOpen) {
+            isDayOverviewOpen = false;
+        }
+    }
+
+    function openCreateModal(targetDate: Date = currentDate, startTime = '13:00') {
+        isDayOverviewOpen = false;
         selectedBookingToEdit = null;
         selectedDateForModal = new Date(targetDate);
+        selectedStartTime = startTime;
         isModalOpen = true;
+    }
+
+    function openCreateModalAtTime(targetDate: Date, event: MouseEvent) {
+        const calendarColumn = event.currentTarget as HTMLElement;
+        const { top, height } = calendarColumn.getBoundingClientRect();
+        const clickedOffset = Math.max(0, Math.min(event.clientY - top, height));
+        const minutesFromGridStart = Math.min(
+            Math.round((clickedOffset / height) * visibleHours.length) * 60,
+            (visibleHours.length - 1) * 60
+        );
+        const startMinutes = (startHourGrid * 60 + minutesFromGridStart) % (24 * 60);
+        const hour = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+        const minute = String(startMinutes % 60).padStart(2, '0');
+        openCreateModal(targetDate, `${hour}:${minute}`);
     }
 
     function openEditModal(booking: Booking, event?: Event) {
         if (event) event.stopPropagation();
+        isDayOverviewOpen = false;
         selectedBookingToEdit = booking;
         isModalOpen = true;
     }
 
-    async function handleSaveBooking(savedBooking: Booking | BookingInput) {
+    async function handleSaveBooking(savedBooking: Booking | BookingInput): Promise<boolean> {
+        const overlap = hasBookingOverlap(savedBooking);
+        if (overlap) {
+            const start = `${String(overlap.booking.startHour).padStart(2, '0')}:${String(overlap.booking.startMinute).padStart(2, '0')}`;
+            const end = `${String(overlap.booking.endHour).padStart(2, '0')}:${String(overlap.booking.endMinute).padStart(2, '0')}`;
+            await alert.warn('Time slot already booked', `This time overlaps with "${overlap.booking.title}" on ${overlap.date} (${start}–${end}). Choose another time or venue.`);
+            return false;
+        }
+
         if ('id' in savedBooking && savedBooking.id !== undefined) {
             const updated = await api.updateBooking(savedBooking);
             const index = bookings.findIndex((b) => b.id === savedBooking.id);
@@ -275,6 +408,7 @@
         }
 
         await invalidateAll();
+        return true;
     }
 
     async function handleDeleteBooking(id: number) {
@@ -295,6 +429,8 @@
         };
     }
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="page-root flex flex-col w-full h-full text-text-on-secondary font-sans select-none">
     <div
@@ -352,8 +488,11 @@
                     </select>
                 </div>
                 <div>
-                    <Button onclick={() => exportToPDF()} style="background-color: {activeColor} !important" class="transition-colors">
-                        Print / Export
+                    <Button onclick={exportAgendaPDF} style="background-color: {activeColor} !important" class="transition-colors">
+                        Agenda PDF
+                    </Button>
+                    <Button onclick={exportToCSV} style="background-color: {activeColor} !important" class="transition-colors">
+                        Export CSV
                     </Button>
                 </div>
             </div>
@@ -395,7 +534,7 @@
 
                         <div
                                 class="relative border-r border-slate-100 last:border-r-0 cursor-pointer {isToday ? 'bg-blue-50/10' : ''}"
-                                onclick={() => openCreateModal(day)}
+                                onclick={(event) => openCreateModalAtTime(day, event)}
                                 role="button"
                                 tabindex="0"
                                 onkeydown={(e) => e.key === 'Enter' && openCreateModal(day)}
@@ -466,14 +605,14 @@
 
                         <div
                                 class="month-cell bg-white p-1.5 flex flex-col justify-start overflow-hidden transition-colors hover:bg-slate-50/80 cursor-pointer {cell.isCurrentMonth ? '' : 'bg-slate-50/60 text-slate-400'}"
-                                onclick={() => openCreateModal(cell.date)}
+                                onclick={() => openDayOverview(cell.date)}
                                 role="button"
                                 tabindex="0"
-                                onkeydown={(e) => e.key === 'Enter' && openCreateModal(cell.date)}
+                                onkeydown={(e) => e.key === 'Enter' && openDayOverview(cell.date)}
                         >
                             <div class="flex items-center justify-between mb-1 shrink-0">
                                 <button
-                                        onclick={(e) => { e.stopPropagation(); selectDateAndSwitchToWeek(cell.date); }}
+                                        onclick={(e) => { e.stopPropagation(); openDayOverview(cell.date); }}
                                         class="text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200 transition-colors
                                     {isToday ? 'bg-blue-600 text-white hover:bg-blue-700 font-extrabold' : (cell.isCurrentMonth ? 'text-slate-800' : 'text-slate-400')}"
                                 >
@@ -485,7 +624,7 @@
                             </div>
 
                             <div class="flex-1 overflow-hidden space-y-0.5">
-                                {#each dayBookings as booking}
+                                {#each dayBookings.slice(0, 3) as booking}
                                     <button
                                             type="button"
                                             onclick={(e) => openEditModal(booking, e)}
@@ -505,6 +644,9 @@
                                         </span>
                                     </button>
                                 {/each}
+                                {#if dayBookings.length > 3}
+                                    <span class="block text-[10px] font-bold text-blue-700 truncate">+{dayBookings.length - 3} more (view day)</span>
+                                {/if}
                             </div>
                         </div>
                     {/each}
@@ -512,123 +654,84 @@
             </div>
         {/if}
     </main>
+
 </div>
+
+{#if isDayOverviewOpen}
+    {@const dayBookings = getBookingsForDay(selectedOverviewDate)}
+    <div class="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <button
+                type="button"
+                class="absolute inset-0 cursor-default backdrop-blur-xs bg-slate-900/40"
+                aria-label="Close day overview"
+                onclick={() => (isDayOverviewOpen = false)}
+        ></button>
+        <div
+                class="relative z-10 w-full max-w-2xl space-y-4 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-xl max-h-[90vh] overflow-y-auto"
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="day-overview-title"
+        >
+            <div class="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                    <h3 id="day-overview-title" class="text-lg font-bold">
+                        {selectedOverviewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h3>
+                    <p class="text-sm text-slate-500">{dayBookings.length} booking{dayBookings.length === 1 ? '' : 's'}</p>
+                </div>
+                <button
+                        type="button"
+                        onclick={() => (isDayOverviewOpen = false)}
+                        class="font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                        aria-label="Close day overview"
+                >✕</button>
+            </div>
+
+            {#if dayBookings.length > 0}
+                <div class="space-y-2">
+                    {#each dayBookings as booking}
+                        <button
+                                type="button"
+                                onclick={(e) => openEditModal(booking, e)}
+                                class="flex w-full items-center justify-between gap-4 rounded-lg border border-slate-200 border-l-4 p-3 text-left transition-colors hover:bg-slate-50"
+                                style="border-left-color: {hallThemeStyles.mainColor}; background-color: {hallThemeStyles.lightBg};"
+                        >
+                            <span class="min-w-0">
+                                <span class="block truncate font-bold">{booking.title}</span>
+                                <span class="block truncate text-sm text-slate-600">{getRenterLabel(booking)}</span>
+                                {#if booking.recurrence === 'weekly'}
+                                    <span class="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase">Weekly</span>
+                                {/if}
+                            </span>
+                            <span class="shrink-0 font-mono text-sm font-bold">
+                                {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')} -
+                                {booking.endHour.toString().padStart(2, '0')}:{booking.endMinute.toString().padStart(2, '0')}
+                            </span>
+                        </button>
+                    {/each}
+                </div>
+            {:else}
+                <p class="py-8 text-center text-sm text-slate-500">No bookings for this day.</p>
+            {/if}
+
+            <div class="flex justify-end border-t border-border pt-3">
+                <Button onclick={() => openCreateModal(selectedOverviewDate)} style="background-color: {activeColor} !important">
+                    New booking
+                </Button>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <Modal
         bind:isOpen={isModalOpen}
         bookingToEdit={selectedBookingToEdit}
         selectedDate={selectedDateForModal}
+        {selectedStartTime}
         {locations}
         {renters}
         {selectedLocationId}
         onSave={handleSaveBooking}
         onDelete={handleDeleteBooking}
 />
-
-<style>
-    @media print {
-        @page {
-            size: A4 landscape;
-            margin: 6mm;
-        }
-
-        :global(html), :global(body) {
-            height: 100% !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-            background: white !important;
-        }
-
-        * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-
-        .no-print {
-            display: none !important;
-        }
-
-        .page-root {
-            height: 100% !important;
-            max-height: 100% !important;
-            width: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-            overflow: hidden !important;
-            box-sizing: border-box !important;
-        }
-
-        .print-header {
-            display: flex !important;
-            flex-shrink: 0 !important;
-            margin-bottom: 4px !important;
-            padding-bottom: 4px !important;
-        }
-
-        main {
-            flex: 1 1 auto !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            overflow: hidden !important;
-        }
-
-        .month-view-container {
-            height: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-            background-color: #cbd5e1 !important;
-        }
-
-        .month-header-row {
-            display: grid !important;
-            grid-template-columns: repeat(7, 1fr) !important;
-            background-color: #f8fafc !important;
-            border-bottom: 1px solid #94a3b8 !important;
-        }
-
-        .month-grid-cells {
-            display: grid !important;
-            grid-template-columns: repeat(7, 1fr) !important;
-            flex: 1 1 auto !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            gap: 1px !important;
-            background-color: #94a3b8 !important;
-        }
-
-        .month-cell {
-            display: flex !important;
-            flex-direction: column !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            padding: 2px !important;
-            box-sizing: border-box !important;
-            background-color: white !important;
-            overflow: hidden !important;
-        }
-
-        .cell-header {
-            margin-bottom: 2px !important;
-        }
-
-        .events-list {
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 1px !important;
-            overflow: hidden !important;
-        }
-
-        .booking-pill {
-            display: flex !important;
-            align-items: center !important;
-            padding: 1px 2px !important;
-            font-size: 8px !important;
-            line-height: 1.1 !important;
-            border-left-width: 3px !important;
-            border-radius: 2px !important;
-            box-shadow: none !important;
-        }
-    }
-</style>
