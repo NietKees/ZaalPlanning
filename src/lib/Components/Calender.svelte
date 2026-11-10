@@ -7,6 +7,7 @@
     import { invalidateAll } from "$app/navigation";
     import {alert} from "$lib/utils/utils"
     import { downloadAgendaPdf } from '$lib/utils/agendaPdf';
+    import {PinInput} from "bits-ui";
 
     function csvCell(value: string | number): string {
         let text = String(value);
@@ -104,7 +105,7 @@
     let selectedDateForModal = $state<Date>(new Date());
     let selectedStartTime = $state('13:00');
     let selectedOverviewDate = $state<Date>(new Date());
-
+    let selectedRenter: number | undefined = $state();
     // THEME HELPERS
     let selectedLocation = $derived(
         locations.find(l => l.id === selectedLocationId) || locations[0]
@@ -210,7 +211,7 @@
         return bookings.filter(b => {
             if (b.locationId !== selectedLocationId && b.location?.id !== selectedLocationId) return false;
             if (b.excludedDates?.includes(dateString)) return false;
-
+            if (selectedRenter && selectedRenter !== b.renterId) return false;
             if (b.recurrence === 'weekly') {
                 if (b.dayOfWeek !== dayOfWeek) return false;
                 const fromDate = (b as any).fromDate;
@@ -467,6 +468,43 @@
                     <button onclick={() => navigate(1)} class="p-1 rounded-full hover:bg-surface/40 cursor-pointer" aria-label="Next">&rarr;</button>
                 </div>
             </div>
+            <div class="flex items-center gap-2">
+                {#if selectedRenter}
+                    <!-- Active Filter Badge -->
+                    <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shadow-xs transition-all animate-in fade-in"
+                            style="background-color: {hallThemeStyles.lightBg}; color: {hallThemeStyles.mainColor}; border: 1px solid {hallThemeStyles.border};"
+                    >
+                        <span class="w-1.5 h-1.5 rounded-full" style="background-color: {activeColor};"></span>
+                            Filtered
+                            <button
+                                    type="button"
+                                    onclick={() => (selectedRenter = undefined)}
+                                    class="ml-0.5 hover:opacity-75 font-bold cursor-pointer"
+                                    title="Clear filter"
+                            >
+                                ✕
+                            </button>
+                        </span>
+                {:else}
+                    <label for="renter-select" class="text-xs font-extrabold uppercase tracking-wide">Renter:</label>
+                {/if}
+
+                <div class="relative flex items-center gap-2">
+                    <select
+                            id="renter-select"
+                            bind:value={selectedRenter}
+                            style="border-color: {activeColor};"
+                            class="border-l-6 pr-8 px-3 py-2 text-sm bg-surface rounded-lg border shadow-xs focus:outline-none cursor-pointer transition-colors}"
+                    >
+                        <option value={undefined}>All Renters</option>
+                        {#each renters as renter}
+                            <option value={renter.id}>{renter.name}</option>
+                        {/each}
+                    </select>
+
+                </div>
+            </div>
 
             <div class="flex items-center gap-3">
                 <div class="flex bg-slate-100 p-1 rounded-lg border gap-1 pt-0 border-t-6 rounded-t-none transition-colors" style="border-top-color: {activeColor}">
@@ -520,7 +558,7 @@
                 <div class="grid grid-cols-[70px_repeat(7,1fr)] relative flex-1 bg-white">
                     <div class="border-r border-slate-200 bg-slate-50/50">
                         {#each visibleHours as h}
-                            <div class="h-[60px] relative text-right pr-2">
+                            <div class="h-15 relative text-right pr-2">
                                 <span class="text-[11px] font-mono font-semibold text-slate-400 relative -top-2.5">
                                     {h.label}
                                 </span>
@@ -540,7 +578,7 @@
                                 onkeydown={(e) => e.key === 'Enter' && openCreateModal(day)}
                         >
                             {#each visibleHours as _}
-                                <div class="h-[60px] border-b border-slate-100 hover:bg-slate-50/60 transition-colors"></div>
+                                <div class="h-15 border-b border-slate-100 hover:bg-slate-50/60 transition-colors"></div>
                             {/each}
 
                             {#each dayBookings as booking}
