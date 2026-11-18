@@ -2,6 +2,7 @@
     import Button from "$lib/Components/Button.svelte";
     import type { Booking, RenterGroup, Renter } from "$lib/types";
     import { getRenters, getRenterGroups } from "$lib/api";
+    import { bookingOccursOn } from "$lib/utils/recurrence";
 
     const { data } = $props();
     let renters = $state<Renter[]>(data.renters ?? []);
@@ -213,30 +214,13 @@
     }
 
     function getBookingOccurrenceDates(booking: Booking): string[] {
-        const from = fromDateString;
-        const to = toDateString;
-        const excludedDates = new Set(booking.excludedDates ?? []);
-
-        if (booking.recurrence === 'none') {
-            return booking.date && booking.date >= from && booking.date <= to && !excludedDates.has(booking.date)
-                ? [booking.date]
-                : [];
-        }
-
-        if (booking.recurrence !== 'weekly' || booking.dayOfWeek == null) return [];
-
-        const effectiveFrom = booking.fromDate && booking.fromDate > from ? booking.fromDate : from;
-        const effectiveTo = booking.toDate && booking.toDate < to ? booking.toDate : to;
-        const [fromYear, fromMonth, fromDay] = effectiveFrom.split('-').map(Number);
-        const current = new Date(fromYear, fromMonth - 1, fromDay);
-        const dayOffset = (booking.dayOfWeek - current.getDay() + 7) % 7;
-        current.setDate(current.getDate() + dayOffset);
-
         const occurrenceDates: string[] = [];
-        while (formatDateToString(current) <= effectiveTo) {
+        const [fromYear, fromMonth, fromDay] = fromDateString.split('-').map(Number);
+        const current = new Date(fromYear, fromMonth - 1, fromDay);
+        while (formatDateToString(current) <= toDateString) {
             const date = formatDateToString(current);
-            if (!excludedDates.has(date)) occurrenceDates.push(date);
-            current.setDate(current.getDate() + 7);
+            if (bookingOccursOn(booking, current)) occurrenceDates.push(date);
+            current.setDate(current.getDate() + 1);
         }
         return occurrenceDates;
     }
@@ -274,7 +258,9 @@
                     clientInvoice.renter.email,
                     booking.title,
                     item.locationTable.name,
-                    booking.recurrence === 'none' ? `One-time (${booking.date ?? 'N/A'})` : 'Weekly',
+                    booking.recurrence === 'none'
+                        ? `One-time (${booking.date ?? 'N/A'})`
+                        : booking.recurrence.charAt(0).toUpperCase() + booking.recurrence.slice(1),
                     days[booking.dayOfWeek ?? 0],
                     `${String(booking.startHour).padStart(2, '0')}:${String(booking.startMinute).padStart(2, '0')}`,
                     `${String(booking.endHour).padStart(2, '0')}:${String(booking.endMinute).padStart(2, '0')}`,

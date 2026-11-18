@@ -56,7 +56,7 @@ export const bookingTable = sqliteTable('bookingTable', {
     endMinute: int('end_minute').notNull(),
 
     // Recurrence & Dates
-    recurrence: text('recurrence', { enum: ['none', 'weekly'] }).notNull().default('none'),
+    recurrence: text('recurrence', { enum: ['none', 'weekly', 'biweekly', 'monthly'] }).notNull().default('none'),
     dayOfWeek: int('day_of_week'), // 0 (Sun) - 6 (Sat)
     date: text('date'), // YYYY-MM-DD for single events
     fromDate: text('from_date'), // YYYY-MM-DD start range for recurring bookings
@@ -125,7 +125,7 @@ export const bookingTableRelations = relations(bookingTable, ({ one }) => ({
 export type LocationSchema = InferSelectModel<typeof locationTable>;
 export type NewLocationSchema = InferInsertModel<typeof locationTable>;
 
-export type RenterSchema = InferSelectModel<typeof renterTable>;
+export type RenterTableschema = InferSelectModel<typeof renterTable>;
 export type NewRenterSchema = InferInsertModel<typeof renterTable>;
 
 export type BookingSchema = InferSelectModel<typeof bookingTable>;

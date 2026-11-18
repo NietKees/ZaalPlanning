@@ -45,7 +45,7 @@ export type RenterGroup = {
 
 export type CreateRenterGroupInput = Omit<RenterGroup, 'id'>
 
-export type RecurrencePattern = 'none' | 'weekly';
+export type RecurrencePattern = 'none' | 'weekly' | 'biweekly' | 'monthly';
 
 export interface Booking {
     id: number;

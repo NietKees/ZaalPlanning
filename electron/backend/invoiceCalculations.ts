@@ -18,6 +18,10 @@ function parseLocalDate(dateString: string): Date {
     return new Date(year, month - 1, day);
 }
 
+function dateOrdinal(date: Date): number {
+    return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
+}
+
 export function getBookingOccurrenceDates(
     booking: OccurrenceBooking,
     from: Date,
@@ -36,7 +40,7 @@ export function getBookingOccurrenceDates(
             : [];
     }
 
-    if (booking.recurrence !== 'weekly' || booking.dayOfWeek == null ||
+    if (!['weekly', 'biweekly', 'monthly'].includes(booking.recurrence) || booking.dayOfWeek == null ||
         booking.dayOfWeek < 0 || booking.dayOfWeek > 6) {
         return [];
     }
@@ -49,16 +53,51 @@ export function getBookingOccurrenceDates(
         : rangeEnd;
     if (effectiveStart > effectiveEnd) return [];
 
-    const current = parseLocalDate(effectiveStart);
-    const dayOffset = (booking.dayOfWeek - current.getDay() + 7) % 7;
-    current.setDate(current.getDate() + dayOffset);
-
     const dates: string[] = [];
-    while (toLocalDateString(current) <= effectiveEnd) {
-        const date = toLocalDateString(current);
-        if (!excludedDates.has(date)) dates.push(date);
-        current.setDate(current.getDate() + 7);
+    if (booking.recurrence === 'monthly') {
+        const anchor = parseLocalDate(booking.fromDate || effectiveStart);
+        const weekOfMonth = Math.ceil(anchor.getDate() / 7);
+        const current = parseLocalDate(effectiveStart);
+        current.setDate(1);
+
+        while (toLocalDateString(current).slice(0, 7) <= effectiveEnd.slice(0, 7)) {
+            const occurrence = new Date(current);
+            const dayOffset = (booking.dayOfWeek - occurrence.getDay() + 7) % 7;
+            occurrence.setDate(occurrence.getDate() + dayOffset + (weekOfMonth - 1) * 7);
+
+            const date = toLocalDateString(occurrence);
+            if (occurrence.getMonth() === current.getMonth() &&
+                date >= effectiveStart && date <= effectiveEnd &&
+                !excludedDates.has(date)) {
+                dates.push(date);
+            }
+
+            current.setMonth(current.getMonth() + 1);
+        }
+        return dates;
     }
+
+    const anchor = parseLocalDate(booking.fromDate || effectiveStart);
+    const firstOccurrence = new Date(anchor);
+    const dayOffset = (booking.dayOfWeek - anchor.getDay() + 7) % 7;
+    firstOccurrence.setDate(firstOccurrence.getDate() + dayOffset);
+
+    if (booking.recurrence === 'biweekly') {
+        const daysUntilStart = dateOrdinal(parseLocalDate(effectiveStart)) - dateOrdinal(firstOccurrence);
+        const intervalsToSkip = Math.max(0, Math.ceil(daysUntilStart / 14));
+        firstOccurrence.setDate(firstOccurrence.getDate() + intervalsToSkip * 14);
+    } else {
+        const daysUntilStart = dateOrdinal(parseLocalDate(effectiveStart)) - dateOrdinal(firstOccurrence);
+        const weeksToSkip = Math.max(0, Math.ceil(daysUntilStart / 7));
+        firstOccurrence.setDate(firstOccurrence.getDate() + weeksToSkip * 7);
+    }
+
+    const intervalDays = booking.recurrence === 'biweekly' ? 14 : 7;
+    for (const current = firstOccurrence; toLocalDateString(current) <= effectiveEnd; current.setDate(current.getDate() + intervalDays)) {
+        const date = toLocalDateString(current);
+        if (date >= effectiveStart && !excludedDates.has(date)) dates.push(date);
+    }
+
     return dates;
 }
 

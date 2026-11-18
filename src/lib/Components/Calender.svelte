@@ -7,8 +7,7 @@
     import { invalidateAll } from "$app/navigation";
     import {alert} from "$lib/utils/utils"
     import { downloadAgendaPdf } from '$lib/utils/agendaPdf';
-    import {PinInput} from "bits-ui";
-
+    import { bookingOccursOn } from '$lib/utils/recurrence';
     function csvCell(value: string | number): string {
         let text = String(value);
         if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
@@ -205,22 +204,10 @@
 
     // EVENT MATCHING LOGIC
     function getBookingsForDay(day: Date): Booking[] {
-        const dateString = toLocalDateString(day);
-        const dayOfWeek = day.getDay();
-
         return bookings.filter(b => {
             if (b.locationId !== selectedLocationId && b.location?.id !== selectedLocationId) return false;
-            if (b.excludedDates?.includes(dateString)) return false;
             if (selectedRenter && selectedRenter !== b.renterId) return false;
-            if (b.recurrence === 'weekly') {
-                if (b.dayOfWeek !== dayOfWeek) return false;
-                const fromDate = (b as any).fromDate;
-                const toDate = (b as any).toDate;
-                if (fromDate && dateString < fromDate) return false;
-                if (toDate && dateString > toDate) return false;
-                return true;
-            }
-            return b.date === dateString;
+            return bookingOccursOn(b, day);
         }).sort((a, b) => {
             const timeA = a.startHour * 60 + a.startMinute;
             const timeB = b.startHour * 60 + b.startMinute;
@@ -229,31 +216,19 @@
         });
     }
 
-    function bookingOccursOn(booking: Booking | BookingInput, date: Date): boolean {
-        const dateString = toLocalDateString(date);
-        if (booking.excludedDates?.includes(dateString)) return false;
-        if (booking.recurrence === 'weekly') {
-            if (booking.dayOfWeek !== date.getDay()) return false;
-            if (booking.fromDate && dateString < booking.fromDate) return false;
-            if (booking.toDate && dateString > booking.toDate) return false;
-            return true;
-        }
-        return booking.date === dateString;
-    }
-
     function dateOrdinal(dateString: string): number {
         const [year, month, day] = dateString.split('-').map(Number);
         return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
     }
 
     function hasBookingOverlap(candidate: Booking | BookingInput): { booking: Booking; date: string } | undefined {
-        const candidateStart = candidate.recurrence === 'weekly'
+        const candidateStart = candidate.recurrence !== 'none'
             ? candidate.fromDate || toLocalDateString(new Date())
             : candidate.date;
         if (!candidateStart) return undefined;
 
         const knownEndDates = bookings
-            .flatMap((booking) => booking.recurrence === 'weekly'
+            .flatMap((booking) => booking.recurrence !== 'none'
                 ? [booking.toDate]
                 : [booking.date])
             .filter((date): date is string => Boolean(date))
@@ -266,7 +241,7 @@
             date.setFullYear(date.getFullYear() + 1);
             return toLocalDateString(date);
         })();
-        const candidateEnd = candidate.recurrence === 'weekly'
+        const candidateEnd = candidate.recurrence !== 'none'
             ? candidate.toDate || fallbackEnd
             : candidate.date;
         if (!candidateEnd) return undefined;
@@ -407,6 +382,11 @@
                 bookings.push(created);
             }
         }
+        // Auto-navigate to the start date so the user immediately sees it visually!
+        const effectiveDate = savedBooking.fromDate || savedBooking.date;
+        if (effectiveDate) {
+            currentDate = new Date(`${effectiveDate}T00:00:00`);
+        }
 
         await invalidateAll();
         return true;
@@ -432,6 +412,347 @@
 </script>
 
 <svelte:window onkeydown={handleWindowKeydown} />
+
+<div class="page-root flex flex-col w-full h-full text-text-on-secondary font-sans select-none">
+    <div
+            class="h-1.5 w-full transition-colors duration-300 no-print"
+            style="background-color: {hallThemeStyles.mainColor};"
+    ></div>
+
+    <div use:mountHeader={headerActions} class="hidden"></div>
+
+    {#snippet headerActions()}
+        <div class="flex justify-between w-full items-center px-4 no-print">
+            <div class="flex items-center gap-3">
+                <h1 class="text-lg font-extrabold">Hall Manager</h1>
+
+                {#if selectedLocation}
+                    <div
+                            class="flex items-center gap-2 px-3 py-1 rounded-full border shadow-xs"
+                            style="background-color: {hallThemeStyles.lightBg}; border-color: {hallThemeStyles.border};"
+                    >
+                        <span class="w-2.5 h-2.5 rounded-full animate-pulse" style="background-color: {hallThemeStyles.mainColor};"></span>
+                        <span class="text-lg font-black uppercase tracking-wider">{selectedLocation.name}</span>
+                    </div>
+                {/if}
+            </div>
+
+            <div class="flex items-center gap-2 px-3 py-1 rounded-lg" style="background-color: {activeColor}">
+                <Button variant="subtle" size="sm" onclick={() => (currentDate = new Date())}>
+                    Today
+                </Button>
+
+                <div class="flex items-center gap-1">
+                    <button onclick={() => navigate(-1)} class="p-1 rounded-full hover:bg-surface/40 cursor-pointer" aria-label="Previous">&larr;</button>
+                    <h2 class="text-sm font-bold px-2">{headerLabel}</h2>
+                    <button onclick={() => navigate(1)} class="p-1 rounded-full hover:bg-surface/40 cursor-pointer" aria-label="Next">&rarr;</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                {#if selectedRenter}
+                    <!-- Active Filter Badge -->
+                    <span
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shadow-xs transition-all animate-in fade-in"
+                            style="background-color: {hallThemeStyles.lightBg}; color: {hallThemeStyles.mainColor}; border: 1px solid {hallThemeStyles.border};"
+                    >
+                        <span class="w-1.5 h-1.5 rounded-full" style="background-color: {activeColor};"></span>
+                            Filtered
+                            <button
+                                    type="button"
+                                    onclick={() => (selectedRenter = undefined)}
+                                    class="ml-0.5 hover:opacity-75 font-bold cursor-pointer"
+                                    title="Clear filter"
+                            >
+                                ✕
+                            </button>
+                        </span>
+                {:else}
+                    <label for="renter-select" class="text-xs font-extrabold uppercase tracking-wide">Renter:</label>
+                {/if}
+
+                <div class="relative flex items-center gap-2">
+                    <select
+                            id="renter-select"
+                            bind:value={selectedRenter}
+                            style="border-color: {activeColor};"
+                            class="border-l-6 pr-8 px-3 py-2 text-sm bg-surface rounded-lg border shadow-xs focus:outline-none cursor-pointer transition-colors}"
+                    >
+                        <option value={undefined}>All Renters</option>
+                        {#each renters as renter}
+                            <option value={renter.id}>{renter.name}</option>
+                        {/each}
+                    </select>
+
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="flex bg-slate-100 p-1 rounded-lg border gap-1 pt-0 border-t-6 rounded-t-none transition-colors" style="border-top-color: {activeColor}">
+                    <Button style={viewMode === 'week' ? `background-color: ${activeColor} !important;` : undefined} class="rounded-t-none transition-colors" variant={viewMode !== 'week' ? 'subtle' : 'primary'} size="sm" onclick={() => (viewMode = 'week')}>Week</Button>
+                    <Button style={viewMode === 'month' ? `background-color: ${activeColor} !important;` : undefined} class="rounded-t-none transition-colors" variant={viewMode !== 'month' ? 'subtle' : 'primary'} size="sm" onclick={() => (viewMode = 'month')}>Month</Button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <label for="hall-select" class="text-xs font-extrabold uppercase tracking-wide">Venue:</label>
+                    <select
+                            id="hall-select"
+                            bind:value={selectedLocationId}
+                            style="border-color: {activeColor};"
+                            class="border-l-6 pr-8 px-3 py-2 text-sm bg-surface rounded-lg border shadow-xs focus:outline-none cursor-pointer"
+                    >
+                        {#each locations as loc}
+                            <option value={loc.id}>{loc.name}</option>
+                        {/each}
+                    </select>
+                </div>
+                <div>
+                    <Button onclick={exportAgendaPDF} style="background-color: {activeColor} !important" class="transition-colors">
+                        Agenda PDF
+                    </Button>
+                    <Button onclick={exportToCSV} style="background-color: {activeColor} !important" class="transition-colors">
+                        Export CSV
+                    </Button>
+                </div>
+            </div>
+        </div>
+    {/snippet}
+
+    <main class="h-full w-full flex overflow-hidden printable-view bg-white">
+        {#if viewMode === 'week'}
+            <div class="flex flex-col w-full h-full overflow-auto">
+                <div class="grid grid-cols-[70px_repeat(7,1fr)] border-b border-slate-200 bg-white sticky top-0 z-20 shadow-xs shrink-0">
+                    <div class="border-r border-slate-100"></div>
+                    {#each weekDays as day}
+                        {@const isToday = isSameDay(day, new Date())}
+                        <div class="text-center py-2 border-r border-slate-100 last:border-r-0">
+                            <span class="block text-xs font-bold uppercase tracking-wider {isToday ? 'text-blue-600' : 'text-slate-400'}">
+                                {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                            </span>
+                            <span class="inline-flex items-center justify-center text-base font-extrabold w-7 h-7 rounded-full mt-0.5 {isToday ? 'bg-blue-600 text-white' : 'text-slate-800'}">
+                                {day.getDate()}
+                            </span>
+                        </div>
+                    {/each}
+                </div>
+
+                <div class="grid grid-cols-[70px_repeat(7,1fr)] relative flex-1 bg-white">
+                    <div class="border-r border-slate-200 bg-slate-50/50">
+                        {#each visibleHours as h}
+                            <div class="h-15 relative text-right pr-2">
+                                <span class="text-[11px] font-mono font-semibold text-slate-400 relative -top-2.5">
+                                    {h.label}
+                                </span>
+                            </div>
+                        {/each}
+                    </div>
+
+                    {#each weekDays as day}
+                        {@const dayBookings = getBookingsForDay(day)}
+                        {@const isToday = isSameDay(day, new Date())}
+
+                        <div
+                                class="relative border-r border-slate-100 last:border-r-0 cursor-pointer {isToday ? 'bg-blue-50/10' : ''}"
+                                onclick={(event) => openCreateModalAtTime(day, event)}
+                                role="button"
+                                tabindex="0"
+                                onkeydown={(e) => e.key === 'Enter' && openCreateModal(day)}
+                        >
+                            {#each visibleHours as _}
+                                <div class="h-15 border-b border-slate-100 hover:bg-slate-50/60 transition-colors"></div>
+                            {/each}
+
+                            {#each dayBookings as booking}
+                                {@const top = getEventTop(booking.startHour, booking.startMinute)}
+                                {@const height = getEventHeight(booking.startHour, booking.startMinute, booking.endHour, booking.endMinute)}
+
+                                <button
+                                        type="button"
+                                        onclick={(e) => openEditModal(booking, e)}
+                                        style="
+                                        top: {top}px;
+                                        height: {height}px;
+                                        border-left-color: {hallThemeStyles.mainColor};
+                                        background-color: {hallThemeStyles.lightBg};
+                                    "
+                                        class="booking-pill absolute left-1 right-1 rounded-md p-2 shadow-xs border-l-4 transition-all z-10 flex flex-col justify-between overflow-hidden cursor-pointer text-left text-slate-900 hover:brightness-95"
+                                >
+                                    <div>
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="text-xs font-bold truncate">{booking.title}</span>
+                                            {#if booking.recurrence !== 'none'}
+                                                <span
+                                                        class="no-print text-[9px] font-extrabold uppercase px-1 rounded shrink-0 border border-black/10"
+                                                        style="background-color: {hallThemeStyles.mainColor}; color: {hallThemeStyles.textColor};"
+                                                >
+                                                    Repeating
+                                                </span>
+                                            {/if}
+                                        </div>
+                                        <div class="text-[10px] font-medium opacity-80 mt-0.5 truncate">
+                                            {getRenterLabel(booking)}
+                                        </div>
+                                    </div>
+
+                                    <div class="text-[10px] font-mono font-bold opacity-90">
+                                        {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')} -
+                                        {booking.endHour.toString().padStart(2, '0')}:{booking.endMinute.toString().padStart(2, '0')}
+                                    </div>
+                                </button>
+                            {/each}
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        {:else}
+            <div class="month-view-container h-full w-full overflow-hidden flex flex-col bg-slate-200 gap-px">
+                <div class="grid grid-cols-7 bg-white border-b border-slate-200 shrink-0">
+                    {#each ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as dayName}
+                        <div class="py-1 text-center text-xs font-bold text-slate-600 uppercase tracking-wider">
+                            {dayName}
+                        </div>
+                    {/each}
+                </div>
+
+                <div
+                        class="month-grid-cells grid grid-cols-7 w-full h-full gap-0.5 flex-1 min-h-0 bg-slate-200"
+                        style="grid-template-rows: repeat({monthGrid.length / 7}, 1fr);"
+                >
+                    {#each monthGrid as cell}
+                        {@const dayBookings = getBookingsForDay(cell.date)}
+                        {@const isToday = isSameDay(cell.date, new Date())}
+
+                        <div
+                                class="month-cell bg-white p-1.5 flex flex-col justify-start overflow-hidden transition-colors hover:bg-slate-50/80 cursor-pointer {cell.isCurrentMonth ? '' : 'bg-slate-50/60 text-slate-400'}"
+                                onclick={() => openDayOverview(cell.date)}
+                                role="button"
+                                tabindex="0"
+                                onkeydown={(e) => e.key === 'Enter' && openDayOverview(cell.date)}
+                        >
+                            <div class="flex items-center justify-between mb-1 shrink-0">
+                                <button
+                                        onclick={(e) => { e.stopPropagation(); openDayOverview(cell.date); }}
+                                        class="text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200 transition-colors
+                                    {isToday ? 'bg-blue-600 text-white hover:bg-blue-700 font-extrabold' : (cell.isCurrentMonth ? 'text-slate-800' : 'text-slate-400')}"
+                                >
+                                    {cell.date.getDate()}
+                                </button>
+                                {#if dayBookings.length > 0}
+                                    <span class="no-print text-[10px] font-bold text-slate-400">{dayBookings.length} event{dayBookings.length > 1 ? 's' : ''}</span>
+                                {/if}
+                            </div>
+
+                            <div class="flex-1 overflow-hidden space-y-0.5">
+                                {#each dayBookings.slice(0, 3) as booking}
+                                    <button
+                                            type="button"
+                                            onclick={(e) => openEditModal(booking, e)}
+                                            style="
+                                            border-left-color: {hallThemeStyles.mainColor};
+                                            background-color: {hallThemeStyles.lightBg};
+                                        "
+                                            class="booking-pill w-full text-left flex items-center justify-between px-1 py-0.5 text-xs rounded border-l-2 cursor-pointer transition-all text-slate-900 hover:brightness-95"
+                                            title="{booking.title} ({getRenterLabel(booking)})"
+                                    >
+                                        <span class="flex items-center gap-1 overflow-hidden">
+                                            <span class="font-mono font-bold text-[9px] shrink-0 opacity-80">
+                                                {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')} -
+                                                {booking.endHour.toString().padStart(2, '0')}:{booking.endMinute.toString().padStart(2, '0')}
+                                            </span>
+                                            <span class="truncate font-semibold text-[10px]">{booking.title}</span>
+                                        </span>
+                                    </button>
+                                {/each}
+                                {#if dayBookings.length > 3}
+                                    <span class="block text-[10px] font-bold text-blue-700 truncate">+{dayBookings.length - 3} more (view day)</span>
+                                {/if}
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        {/if}
+    </main>
+
+</div>
+
+{#if isDayOverviewOpen}
+    {@const dayBookings = getBookingsForDay(selectedOverviewDate)}
+    <div class="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <button
+                type="button"
+                class="absolute inset-0 cursor-default backdrop-blur-xs bg-slate-900/40"
+                aria-label="Close day overview"
+                onclick={() => (isDayOverviewOpen = false)}
+        ></button>
+        <div
+                class="relative z-10 w-full max-w-2xl space-y-4 rounded-xl border border-border bg-surface p-6 text-text-on-surface shadow-xl max-h-[90vh] overflow-y-auto"
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="day-overview-title"
+        >
+            <div class="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                    <h3 id="day-overview-title" class="text-lg font-bold">
+                        {selectedOverviewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h3>
+                    <p class="text-sm text-slate-500">{dayBookings.length} booking{dayBookings.length === 1 ? '' : 's'}</p>
+                </div>
+                <button
+                        type="button"
+                        onclick={() => (isDayOverviewOpen = false)}
+                        class="font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                        aria-label="Close day overview"
+                >✕</button>
+            </div>
+
+            {#if dayBookings.length > 0}
+                <div class="space-y-2">
+                    {#each dayBookings as booking}
+                        <button
+                                type="button"
+                                onclick={(e) => openEditModal(booking, e)}
+                                class="flex w-full items-center justify-between gap-4 rounded-lg border border-slate-200 border-l-4 p-3 text-left transition-colors hover:bg-slate-50"
+                                style="border-left-color: {hallThemeStyles.mainColor}; background-color: {hallThemeStyles.lightBg};"
+                        >
+                            <span class="min-w-0">
+                                <span class="block truncate font-bold">{booking.title}</span>
+                                <span class="block truncate text-sm text-slate-600">{getRenterLabel(booking)}</span>
+                                {#if booking.recurrence === 'weekly'}
+                                    <span class="mt-1 inline-block rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold uppercase">Weekly</span>
+                                {/if}
+                            </span>
+                            <span class="shrink-0 font-mono text-sm font-bold">
+                                {booking.startHour.toString().padStart(2, '0')}:{booking.startMinute.toString().padStart(2, '0')} -
+                                {booking.endHour.toString().padStart(2, '0')}:{booking.endMinute.toString().padStart(2, '0')}
+                            </span>
+                        </button>
+                    {/each}
+                </div>
+            {:else}
+                <p class="py-8 text-center text-sm text-slate-500">No bookings for this day.</p>
+            {/if}
+
+            <div class="flex justify-end border-t border-border pt-3">
+                <Button onclick={() => openCreateModal(selectedOverviewDate)} style="background-color: {activeColor} !important">
+                    New booking
+                </Button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<Modal
+        bind:isOpen={isModalOpen}
+        bookingToEdit={selectedBookingToEdit}
+        selectedDate={selectedDateForModal}
+        {selectedStartTime}
+        {locations}
+        {renters}
+        {selectedLocationId}
+        onSave={handleSaveBooking}
+        onDelete={handleDeleteBooking}
+/>
 
 <div class="page-root flex flex-col w-full h-full text-text-on-secondary font-sans select-none">
     <div

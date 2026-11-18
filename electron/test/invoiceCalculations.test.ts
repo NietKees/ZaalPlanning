@@ -112,6 +112,38 @@ describe('booking occurrence dates for invoices', () => {
         ]);
     });
 
+    it('lists biweekly occurrences from the booking anchor across DST changes', () => {
+        const booking = makeBooking({
+            recurrence: 'biweekly',
+            date: null,
+            dayOfWeek: 1,
+            fromDate: '2026-03-02',
+            toDate: '2026-03-31',
+            excludedDates: ['2026-03-16']
+        });
+
+        expect(getBookingOccurrenceDates(booking, localDate(2026, 3, 1), localDate(2026, 3, 31))).toEqual([
+            '2026-03-02',
+            '2026-03-30'
+        ]);
+    });
+
+    it('lists monthly occurrences by weekday position in the month', () => {
+        const booking = makeBooking({
+            recurrence: 'monthly',
+            date: null,
+            dayOfWeek: 1,
+            fromDate: '2026-03-02',
+            toDate: '2026-05-31'
+        });
+
+        expect(getBookingOccurrenceDates(booking, localDate(2026, 3, 1), localDate(2026, 5, 31))).toEqual([
+            '2026-03-02',
+            '2026-04-06',
+            '2026-05-04'
+        ]);
+    });
+
     it('returns no occurrences for a non-overlapping or reversed range', () => {
         const booking = makeBooking({
             recurrence: 'weekly',
@@ -170,6 +202,29 @@ describe('invoice line calculations', () => {
             localDate(2026, 3, 31)
         );
         expect(invoice).toEqual({ amount: 3, cost: 39.82, subtotal: 119.46 });
+    });
+
+    it('includes biweekly and monthly bookings in invoice totals', () => {
+        const from = localDate(2026, 3, 1);
+        const to = localDate(2026, 5, 31);
+
+        const biweeklyInvoice = calculateBookingInvoice(makeBooking({
+            recurrence: 'biweekly',
+            date: null,
+            dayOfWeek: 1,
+            fromDate: '2026-03-02',
+            toDate: '2026-05-31'
+        }), location, from, to);
+        const monthlyInvoice = calculateBookingInvoice(makeBooking({
+            recurrence: 'monthly',
+            date: null,
+            dayOfWeek: 1,
+            fromDate: '2026-03-02',
+            toDate: '2026-05-31'
+        }), location, from, to);
+
+        expect(biweeklyInvoice).toEqual({ amount: 7, cost: 39.82, subtotal: 278.74 });
+        expect(monthlyInvoice).toEqual({ amount: 3, cost: 39.82, subtotal: 119.46 });
     });
 
     it('uses the override for every occurrence and preserves a zero override', () => {

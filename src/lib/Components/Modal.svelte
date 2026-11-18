@@ -125,85 +125,7 @@
         overWritePricing = enabled;
     }
 
-    // Pricing engine taking location rates and tiered structure into account
 
-    // async function fetchUpdatedPricing(params: {
-    //     locationId?: number;
-    //     startHour: number;
-    //     startMinute: number;
-    //     endHour: number;
-    //     endMinute: number;
-    //     recurrence: RecurrencePattern;
-    //     singleDate?: string;
-    //     fromDate?: string;
-    //     toDate?: string;
-    //     excludedDates: string[];
-    //     overWritePricing: boolean;
-    //     fixedSessionPrice?: number;
-    // }) {
-    //     if (!params.locationId) return;
-    //
-    //     isCalculatingPrice = true;
-    //     try {
-    //         if (params.overWritePricing && params.fixedSessionPrice !== undefined) {
-    //             calculatedCost = params.fixedSessionPrice;
-    //         } else {
-    //             const loc = locations.find((l) => l.id === params.locationId);
-    //             const startMins = params.startHour * 60 + params.startMinute;
-    //             const endMins = params.endHour * 60 + params.endMinute;
-    //             const durationHours = Math.max(0, (endMins - startMins) / 60);
-    //
-    //             let sessionCount = 1;
-    //             if (params.recurrence === 'weekly' && params.fromDate && params.toDate) {
-    //                 const start = parseLocalDate(params.fromDate);
-    //                 const end = parseLocalDate(params.toDate);
-    //                 const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
-    //                 sessionCount = Math.max(1, Math.floor(diffDays / 7) + 1 - params.excludedDates.length);
-    //             }
-    //
-    //             let pricePerSession = 0;
-    //
-    //             if (loc) {
-    //                 const {
-    //                     hourlyRate,
-    //                     flatSessionPrice,
-    //                     extendedHourlyRate,
-    //                     shortSessionHourCap,
-    //                     fullSessionHourCap
-    //                 } = loc;
-    //
-    //                 if (
-    //                     flatSessionPrice != null &&
-    //                     fullSessionHourCap != null &&
-    //                     extendedHourlyRate != null &&
-    //                     durationHours > fullSessionHourCap
-    //                 ) {
-    //                     pricePerSession = flatSessionPrice + (durationHours - fullSessionHourCap) * extendedHourlyRate;
-    //                 } else if (
-    //                     flatSessionPrice != null &&
-    //                     shortSessionHourCap != null &&
-    //                     durationHours > shortSessionHourCap
-    //                 ) {
-    //                     pricePerSession = flatSessionPrice;
-    //                 } else if (hourlyRate != null) {
-    //                     pricePerSession = durationHours * hourlyRate;
-    //                 } else if (flatSessionPrice != null) {
-    //                     pricePerSession = flatSessionPrice;
-    //                 } else {
-    //                     pricePerSession = durationHours * 25;
-    //                 }
-    //             } else {
-    //                 pricePerSession = durationHours * 25;
-    //             }
-    //
-    //             calculatedCost = Math.max(0, pricePerSession * sessionCount);
-    //         }
-    //     } catch (err) {
-    //         console.error("Failed to calculate estimate:", err);
-    //     } finally {
-    //         isCalculatingPrice = false;
-    //     }
-    // }
     async function fetchUpdatedPricing(
             locationId: number | undefined,
             startHour: number,
@@ -352,7 +274,7 @@
             alert.warn('Invalid price', 'Enter a valid fixed price of zero or more.');
             return;
         }
-        if (recurrence === 'weekly' && fromDate && toDate && fromDate > toDate) {
+        if (recurrence != 'none' && fromDate && toDate && fromDate > toDate) {
             alert.warn('Invalid date range', 'The recurring booking end date must be on or after its start date.');
             return;
         }
@@ -374,9 +296,9 @@
             recurrence,
             dayOfWeek: finalDayOfWeek,
             date: recurrence === 'none' ? singleDate : undefined,
-            fromDate: recurrence === 'weekly' ? fromDate : undefined,
-            toDate: recurrence === 'weekly' ? toDate : undefined,
-            category: category.trim() || (recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event'),
+            fromDate: recurrence !== 'none' ? fromDate : undefined,
+            toDate: recurrence !== 'none' ? toDate : undefined,
+            // category: category.trim() || (recurrence === 'weekly' ? 'Recurring Lease' : 'Single Event'),
             excludedDates: excludedDates.length > 0 ? $state.snapshot(excludedDates) : undefined,
             priceOverride: overWritePricing && sessionPrice !== undefined ? Number(sessionPrice) : null
         };
@@ -504,6 +426,14 @@
                             <input type="radio" name="recurrence" value="weekly" bind:group={recurrence} class="text-blue-600 focus:ring-blue-500" />
                             Weekly Repeating
                         </label>
+                        <label class="flex items-center gap-2 text-xs font-semibold text-text-on-surface cursor-pointer">
+                            <input type="radio" name="recurrence" value="biweekly" bind:group={recurrence} class="text-blue-600 focus:ring-blue-500" />
+                            Bi-weekly Repeating
+                        </label>
+                        <label class="flex items-center gap-2 text-xs font-semibold text-text-on-surface cursor-pointer">
+                            <input type="radio" name="recurrence" value="monthly" bind:group={recurrence} class="text-blue-600 focus:ring-blue-500" />
+                            Monthly Repeating
+                        </label>
                     </div>
 
                     {#if recurrence === 'none'}
@@ -589,7 +519,7 @@
                 </div>
                 <p class="-mt-2 text-xs text-text-muted">Times can be selected by the minute. Set the end time to 00:00 to end at midnight the next day.</p>
 
-                {#if recurrence === 'weekly'}
+                {#if recurrence !== 'none'}
                     <div class="space-y-2 rounded-lg border border-amber-200/50 bg-amber-50/20 p-3">
                         <label for="exclude-date-input" class="block text-xs font-bold text-amber-900">Excluded Dates / Cancellations</label>
                         <div class="flex gap-2">
