@@ -70,11 +70,18 @@ export function calculateAnnualStats(booking: Booking, year: number = 2026): Boo
     const totalHours = totalSessions * hrsPerSession;
 
     let totalAmount = 0;
-    if (booking.sessionPrice) {
-        totalAmount = totalSessions * booking.sessionPrice;
-    } else if (booking.hourlyRate) {
-        totalAmount = totalHours * booking.hourlyRate;
+
+    if (booking.priceOverride !== null && booking.priceOverride !== undefined) {
+        totalAmount = totalSessions * booking.priceOverride;
+    }else{
+        totalAmount = totalHours * pricePerHour(booking);
     }
+
+    // if (booking.sessionPrice) {
+    //     totalAmount = totalSessions * booking.sessionPrice;
+    // } else if (booking.hourlyRate) {
+    //     totalAmount = totalHours * booking.hourlyRate;
+    // }
 
     return {
         booking,

@@ -5,12 +5,12 @@ import {
     renterGroupTable,
     type renterGroupTableschema,
     type NewrenterGroupTableschema,
-    type renterTableschema
+    type RenterTableschema
 } from "../schema";
 
 // Extended return type representing a group with attached renters
 export type RenterGroupWithRenters = renterGroupTableschema & {
-    renters: renterTableschema[];
+    renters: RenterTableschema[];
 };
 
 /**

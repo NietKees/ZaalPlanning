@@ -187,12 +187,10 @@
 
                                     <!-- Rate (Price per session or per hour) -->
                                     <td class="px-4 py-3 border-b border-border text-right font-medium text-text-on-surface">
-                                        {#if b.sessionPrice !== null && b.sessionPrice !== undefined}
-                                            €{b.sessionPrice.toFixed(2)} / sess
-                                        {:else if b.hourlyRate !== null && b.hourlyRate !== undefined}
-                                            €{b.hourlyRate.toFixed(2)} / hr
+                                        {#if b.priceOverride !== null && b.priceOverride !== undefined}
+                                            €{b.priceOverride.toFixed(2)} / sess (override)
                                         {:else}
-                                            —
+                                            €{amountInfo?.cost?.toFixed(2) ?? '0.00'} / sess
                                         {/if}
                                     </td>
 

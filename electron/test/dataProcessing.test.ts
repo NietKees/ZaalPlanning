@@ -1,154 +1,144 @@
-import { describe, it, expect } from 'vitest';
-import { getPrice } from '../backend/dataProcessing'; // Adjust path as needed
-import type { locationTableschema } from '../backend/schema';
+import { describe, expect, it } from 'vitest';
+import { getBookingDurationHours, getBookingPrice, getPrice } from '../backend/dataProcessing';
+import type { LocationSchema } from '../backend/schema';
 
-describe('getPrice Unit Tests', () => {
-    // Predefined location fixtures using actual locationTableschema shape
-    const achthoek: locationTableschema = {
-        id: 1,
-        name: 'Achthoek',
-        hourlyRate: 19.91,
-        flatSessionPrice: 130,
-        color: '#FF0000',
+const achthoek: LocationSchema = {
+    id: 1,
+    name: 'Achthoek',
+    color: '#FF0000',
+    hourlyRate: 19.91,
+    flatSessionPrice: 130,
+    extendedHourlyRate: 12.5,
+    shortSessionHourCap: 3.5,
+    fullSessionHourCap: 8
+};
+
+const gymzaal: LocationSchema = { ...achthoek, id: 2, name: 'Gymzaal', color: '#00FF00' };
+const vergader: LocationSchema = {
+    ...achthoek,
+    id: 3,
+    name: 'Vergader',
+    color: '#0000FF',
+    hourlyRate: 10,
+    flatSessionPrice: 35,
+    extendedHourlyRate: 10
+};
+
+describe('room tariffs from the 2026 Excel schedule', () => {
+    it.each([
+        ['Achthoek', achthoek, 1, 19.91],
+        ['Achthoek', achthoek, 2, 39.82],
+        ['Gymzaal', gymzaal, 2, 39.82],
+        ['Vergader', vergader, 1, 10],
+        ['Vergader', vergader, 3.5, 35]
+    ])('%s charges the hourly tariff for %s hours', (_name, location, hours, expected) => {
+        expect(getPrice(Number(hours), location as LocationSchema)).toBe(expected);
+    });
+
+    it.each([
+        ['Achthoek', achthoek, 3.5, 69.69],
+        ['Achthoek', achthoek, 3.75, 69.69],
+        ['Achthoek', achthoek, 4, 69.69],
+        ['Gymzaal', gymzaal, 4, 69.69],
+        ['Vergader', vergader, 4, 35]
+    ])('%s applies the capped day-part rate at %s hours', (_name, location, hours, expected) => {
+        expect(getPrice(Number(hours), location as LocationSchema)).toBe(expected);
+    });
+
+    it.each([
+        ['Achthoek', achthoek, 4.01, 130],
+        ['Achthoek', achthoek, 6, 130],
+        ['Achthoek', achthoek, 8, 130],
+        ['Gymzaal', gymzaal, 8, 130],
+        ['Vergader', vergader, 4.01, 35],
+        ['Vergader', vergader, 8, 35]
+    ])('%s charges the day tariff above 4 through 8 hours (%s hours)', (_name, location, hours, expected) => {
+        expect(getPrice(Number(hours), location as LocationSchema)).toBe(expected);
+    });
+
+    it.each([
+        ['Achthoek', achthoek, 8.5, 136.25],
+        ['Achthoek', achthoek, 9, 142.5],
+        ['Achthoek', achthoek, 10, 155],
+        ['Achthoek', achthoek, 16, 230],
+        ['Achthoek', achthoek, 16.5, 236.25],
+        ['Vergader', vergader, 9, 45],
+        ['Vergader', vergader, 10, 55],
+        ['Vergader', vergader, 16, 115]
+    ])('%s adds the configured overtime rate for %s hours', (_name, location, hours, expected) => {
+        expect(getPrice(Number(hours), location as LocationSchema)).toBe(expected);
+    });
+
+    it('rounds fractional-hour charges to cents', () => {
+        expect(getPrice(2.5, achthoek)).toBe(49.78);
+        expect(getPrice(8.25, vergader)).toBe(37.5);
+    });
+
+    it('returns zero for zero or negative durations', () => {
+        expect(getPrice(0, achthoek)).toBe(0);
+        expect(getPrice(-1, achthoek)).toBe(0);
+    });
+
+    it('uses default tariff values when optional location rates are null', () => {
+        const defaults: LocationSchema = {
+            ...achthoek,
+            hourlyRate: null,
+            flatSessionPrice: null,
+            extendedHourlyRate: null,
+            shortSessionHourCap: null,
+            fullSessionHourCap: null
+        };
+        expect(getPrice(2, defaults)).toBe(39.82);
+        expect(getPrice(4, defaults)).toBe(69.69);
+        expect(getPrice(8, defaults)).toBe(130);
+        expect(getPrice(9, defaults)).toBe(142.5);
+    });
+
+    it('respects customized session caps and tariff values', () => {
+        const custom: LocationSchema = {
+            ...achthoek,
+            hourlyRate: 25,
+            flatSessionPrice: 100,
+            extendedHourlyRate: 15,
+            shortSessionHourCap: 2,
+            fullSessionHourCap: 6
+        };
+        expect(getPrice(2, custom)).toBe(50);
+        expect(getPrice(3, custom)).toBe(50);
+        expect(getPrice(6, custom)).toBe(100);
+        expect(getPrice(7, custom)).toBe(115);
+        expect(getPrice(12, custom)).toBe(190);
+    });
+});
+
+describe('booking duration and price overrides', () => {
+    const booking = {
+        startHour: 22,
+        startMinute: 0,
+        endHour: 0,
+        endMinute: 0,
+        priceOverride: 42
     };
 
-    const gymzaal: locationTableschema = {
-        id: 2,
-        name: 'Gymzaal',
-        hourlyRate: 19.91,
-        flatSessionPrice: 130,
-        color: '#00FF00',
-    };
-
-    const vergader: locationTableschema = {
-        id: 3,
-        name: 'Vergader',
-        hourlyRate: 10.00,
-        flatSessionPrice: 35.00,
-        color: '#0000FF',
-    };
-
-    const customUserDefinedRoom: locationTableschema = {
-        id: 4,
-        name: 'Custom Room',
-        hourlyRate: 25.00,
-        flatSessionPrice: 80.00,
-        color: '#FFFF00',
-    };
-
-    describe('Spreadsheet Specific Validation Cases', () => {
-        it('calculates 9 hours for Achthoek correctly (€142.50)', () => {
-            // 130 + (9 - 8) * 12.50 = 142.50
-            expect(getPrice(9, achthoek)).toBe(142.50);
-        });
-
-        it('calculates 2 hours for Gymzaal correctly (€39.82)', () => {
-            // 2 * 19.91 = 39.82
-            expect(getPrice(2, gymzaal)).toBe(39.82);
-        });
-
-        it('calculates 4 hours (dagdeel) for Vergader correctly (€35.00)', () => {
-            expect(getPrice(4, vergader)).toBe(35.00);
-        });
+    it('calculates normal and overnight session durations', () => {
+        expect(getBookingDurationHours({ ...booking, startHour: 9, endHour: 11, priceOverride: null })).toBe(2);
+        expect(getBookingDurationHours(booking)).toBe(2);
+        expect(getBookingDurationHours({ ...booking, startHour: 9, startMinute: 30, endHour: 10, endMinute: 45 })).toBe(1.25);
+        expect(getBookingDurationHours({ ...booking, startHour: 12, endHour: 12, priceOverride: null })).toBe(24);
     });
 
-    describe('Zero and Negative Hours', () => {
-        it('returns 0 for 0 hours', () => {
-            expect(getPrice(0, achthoek)).toBe(0);
-        });
-
-        it('returns 0 for negative hours', () => {
-            expect(getPrice(-1, achthoek)).toBe(0);
-            expect(getPrice(-10, vergader)).toBe(0);
-        });
+    it('uses a fixed override instead of the calculated tariff', () => {
+        expect(getBookingPrice(booking, achthoek)).toBe(42);
     });
 
-    describe('Duration < 4 Hours (Hourly Rate)', () => {
-        it('calculates 1 hour correctly', () => {
-            expect(getPrice(1, achthoek)).toBe(19.91);
-            expect(getPrice(1, vergader)).toBe(10.00);
-            expect(getPrice(1, customUserDefinedRoom)).toBe(25.00);
-        });
-
-        it('calculates fractional hours correctly', () => {
-            // 2.5 * 19.91 = 49.775 -> rounded to 49.78
-            expect(getPrice(2.5, achthoek)).toBe(49.78);
-            // 1.5 * 10.00 = 15.00
-            expect(getPrice(1.5, vergader)).toBe(15.00);
-        });
-
-        it('calculates boundary upper limit (3.99 hours)', () => {
-            // 3.99 * 19.91 = 79.4409 -> 79.44
-            expect(getPrice(3.99, achthoek)).toBe(69.69);
-        });
+    it('treats a zero override as an intentional free booking', () => {
+        expect(getBookingPrice({ ...booking, priceOverride: 0 }, achthoek)).toBe(0);
     });
 
-    describe('Duration === 4 Hours (Dagdeel Rate)', () => {
-        it('returns flat session rate for exactly 4 hours', () => {
-            expect(getPrice(4, achthoek)).toBe(69.69);
-            expect(getPrice(4, gymzaal)).toBe(69.69);
-            expect(getPrice(4, vergader)).toBe(35.00);
-        });
-
-        it('uses user-defined flatSessionPrice if provided on location object', () => {
-            expect(getPrice(4, customUserDefinedRoom)).toBe(87.50);
-        });
-    });
-
-    describe('Duration > 4 and <= 8 Hours (Full Day Rate)', () => {
-        it('charges fixed day rate for 4.01 hours', () => {
-            expect(getPrice(4.01, achthoek)).toBe(130.00);
-            expect(getPrice(4.01, vergader)).toBe(35.00);
-        });
-
-        it('charges fixed day rate for 6 hours', () => {
-            expect(getPrice(6, achthoek)).toBe(130.00);
-            expect(getPrice(6, gymzaal)).toBe(130.00);
-            expect(getPrice(6, vergader)).toBe(35.00);
-        });
-
-        it('charges fixed day rate at upper boundary (exactly 8 hours)', () => {
-            expect(getPrice(8, achthoek)).toBe(130.00);
-            expect(getPrice(8, vergader)).toBe(35.00);
-        });
-    });
-
-    describe('Duration > 8 Hours (Full Day + Overtime Rate)', () => {
-        it('calculates 8.5 hours with half-hour surcharge', () => {
-            // 130 + (8.5 - 8) * 12.50 = 130 + 6.25 = 136.25
-            expect(getPrice(8.5, achthoek)).toBe(136.25);
-        });
-
-        it('calculates 10 hours for standard room (€155.00)', () => {
-            // 130 + (10 - 8) * 12.50 = 155.00
-            expect(getPrice(10, achthoek)).toBe(155.00);
-        });
-
-        it('calculates 10 hours for Vergader room (€55.00)', () => {
-            // 35 + (10 - 8) * 12.50 = 55.00
-            expect(getPrice(10, vergader)).toBe(60.00);
-        });
-
-        it('calculates 12 hours for standard room (€180.00)', () => {
-            // 130 + (12 - 8) * 12.50 = 180.00
-            expect(getPrice(12, achthoek)).toBe(180.00);
-        });
-    });
-
-    describe('Fallback Behavior for Missing/Null Location Values', () => {
-        it('handles null hourlyRate gracefully by using fallbacks', () => {
-            const locationWithNulls: locationTableschema = {
-                id: 5,
-                name: 'Achthoek',
-                hourlyRate: null,
-                flatSessionPrice: null,
-                color: null,
-            };
-
-            // Uses 19.91 default
-            expect(getPrice(2, locationWithNulls)).toBe(39.82);
-            // Uses 69.69 default
-            expect(getPrice(4, locationWithNulls)).toBe(69.69);
-        });
+    it('falls back to the room tariff for null or absent overrides', () => {
+        const noOverride = { ...booking, startHour: 9, endHour: 11, priceOverride: null };
+        expect(getBookingPrice(noOverride, achthoek)).toBe(39.82);
+        const omittedOverride = { startHour: 9, startMinute: 0, endHour: 11, endMinute: 0 };
+        expect(getBookingPrice(omittedOverride, achthoek)).toBe(39.82);
     });
 });
