@@ -43,6 +43,9 @@ jobs:
       - name: Enable MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Create empty database for packaging
+        run: node -e "require('fs').writeFileSync('database.db', '')"
+
       - name: Build Electron App and Make Installers
         run: pnpm exec electron-forge make
         env:
