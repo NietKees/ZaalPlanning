@@ -9,6 +9,10 @@ jobs:
   release:
     runs-on: windows-2022
 
+    # 1. ADD THIS PERMISSIONS BLOCK
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,6 +47,7 @@ jobs:
       - name: Enable MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      # 2. CREATE EMPTY DATABASE SO ELECTRON FORGE PACKAGING DOES NOT CRASH
       - name: Create empty database for packaging
         run: node -e "require('fs').writeFileSync('database.db', '')"
 
@@ -54,10 +59,12 @@ jobs:
       - name: Create GitHub Release and Upload Artifacts
         uses: softprops/action-gh-release@v2
         with:
+          # 3. FIXED MULTILINE SYNTAX FOR FILES
           files: |
             out/make/**/*.exe
             out/make/**/*.zip
             out/make/squirrel.windows/x64/*.exe
           generate_release_notes: true
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
