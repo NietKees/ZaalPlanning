@@ -49,3 +49,12 @@ contextBridge.exposeInMainWorld("backupAPI", {
     saveBackup: (customPath?: string) => ipcRenderer.invoke("saveBackup", customPath),
     restoreBackup: () => ipcRenderer.invoke("restoreBackup")
 });
+
+contextBridge.exposeInMainWorld("publicScheduleAPI", {
+    getConfig: () => ipcRenderer.invoke("publicSchedule:getConfig"),
+    saveConfig: (config: { owner: string; repo: string; branch: string }) =>
+        ipcRenderer.invoke("publicSchedule:saveConfig", config),
+    saveToken: (token: string) => ipcRenderer.invoke("publicSchedule:saveToken", token),
+    clearToken: () => ipcRenderer.invoke("publicSchedule:clearToken"),
+    publish: (token?: string) => ipcRenderer.invoke("publicSchedule:publish", { token })
+});

@@ -15,6 +15,14 @@ export interface IpcResponse<T = unknown> {
     error?: string;
 }
 
+interface PublicScheduleConfig {
+    owner: string;
+    repo: string;
+    branch: string;
+    tokenSaved: boolean;
+    secureStorageAvailable: boolean;
+}
+
 declare global {
     interface Window {
         api: {
@@ -51,13 +59,25 @@ declare global {
                 getInvoice: (id: number, range: { from: Date; to: Date }) => Promise<any>;
                 getPrice: (duration: number, locationId: number) => Promise<IpcResponse>
             };
+            getAppVersion: () => Promise<string>;
         };
         backupAPI: {
             getDump: () => Promise<IpcResponse<any>>;
-            getSavePath: () => Promise<string>;
-            selectDirectory: () => Promise<string | null>;
+            getSavePath: () => Promise<IpcResponse<string | null>>;
+            selectDirectory: () => Promise<IpcResponse<string | null>>;
             saveBackup: (customPath?: string) => Promise<IpcResponse<string>>;
             restoreBackup: () => Promise<IpcResponse<unknown> | null>;
+        };
+        publicScheduleAPI: {
+            getConfig: () => Promise<IpcResponse<PublicScheduleConfig>>;
+            saveConfig: (config: { owner: string; repo: string; branch: string }) => Promise<IpcResponse<{
+                owner: string;
+                repo: string;
+                branch: string;
+            }>>;
+            saveToken: (token: string) => Promise<IpcResponse<boolean>>;
+            clearToken: () => Promise<IpcResponse<boolean>>;
+            publish: (token?: string) => Promise<IpcResponse<{ eventCount: number; path: string }>>;
         };
     }
 }

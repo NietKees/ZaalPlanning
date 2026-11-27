@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Public schedule</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #0f172a; background: #fff; --accent: #3b82f6; --accent-light: #eff6ff; --line: #e2e8f0; --muted: #64748b; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+    header { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: .6rem max(1rem, calc((100vw - 1440px) / 2)); background: white; border-bottom: 1px solid var(--line); box-shadow: 0 1px 3px #0f172a0d; }
+    h1 { margin: 0; font-size: 1.05rem; font-weight: 800; }
+    main { width: 100%; max-width: 1480px; margin: 0 auto; padding: .75rem 1rem 1rem; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .toolbar, .navigation, .view-switch { display: flex; align-items: center; gap: .35rem; }
+    .navigation { padding: .3rem .45rem; border-radius: .6rem; background: var(--accent); color: white; }
+    button { border: 0; border-radius: .4rem; background: transparent; padding: .45rem .65rem; color: inherit; font: inherit; font-size: .85rem; font-weight: 650; cursor: pointer; transition: background .15s, color .15s; }
+    button:hover { background: #0f172a0d; }
+    .navigation button:hover { background: #ffffff2b; }
+    #period { min-width: 12rem; margin: 0; text-align: center; font-size: .9rem; font-weight: 750; }
+    .view-switch { padding: .2rem; border: 1px solid var(--line); border-top: 4px solid var(--accent); border-radius: .45rem; background: #f1f5f9; }
+    .view-switch button[aria-pressed="true"] { background: var(--accent); color: white; }
+    .venue-select-wrap { display: flex; align-items: center; gap: .45rem; color: #0f172a; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+    #venue-select { max-width: 13rem; padding: .45rem 2rem .45rem .65rem; border: 1px solid var(--accent); border-left: 4px solid var(--accent); border-radius: .45rem; background: white; color: #0f172a; font: 600 .82rem system-ui, sans-serif; text-transform: none; }
+    #today { background: #ffffff24; }
+    #status { margin: .1rem 0 .55rem; color: var(--muted); font-size: .75rem; }
+    .calendar-scroll { min-height: 0; overflow: auto; }
+    .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; overflow: hidden; border-radius: .45rem; background: #e2e8f0; }
+    .weekday, .day { min-width: 0; background: white; }
+    .weekday { position: sticky; top: 0; z-index: 2; padding: .45rem .2rem; border-bottom: 1px solid var(--line); text-align: center; font-size: .68rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .06em; }
+    .day { min-height: 6.7rem; padding: .35rem; overflow: hidden; }
+    .day.outside { background: #f8fafc; }
+    .day.outside .day-number { color: #94a3b8; }
+    .day.today .day-number { display: inline-flex; align-items: center; justify-content: center; width: 1.55rem; height: 1.55rem; border-radius: 50%; background: var(--accent); color: white; }
+    .day-number { display: flex; align-items: center; justify-content: space-between; min-height: 1.55rem; padding: 0 .2rem; font-size: .76rem; font-weight: 800; }
+    .event { overflow: hidden; margin-top: .22rem; padding: .22rem .3rem; border-left: 3px solid var(--event-color, var(--accent)); border-radius: .2rem; background: color-mix(in srgb, var(--event-color, var(--accent)) 12%, white); color: #0f172a; font-size: .68rem; line-height: 1.25; text-overflow: ellipsis; }
+    .event-title { display: block; overflow: hidden; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+    .event-meta { display: block; overflow: hidden; color: #475569; font-size: .62rem; text-overflow: ellipsis; white-space: nowrap; }
+    .more-events { padding: .15rem .25rem; color: #1d4ed8; font-size: .64rem; font-weight: 750; }
+    .week-wrap { min-width: 780px; }
+    .week-header, .week-body { display: grid; grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
+    .week-header { position: sticky; top: 0; z-index: 3; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 1px 3px #0f172a0d; }
+    .week-header-spacer { border-right: 1px solid #f1f5f9; }
+    .week-heading { padding: .35rem .15rem; border-right: 1px solid #f1f5f9; text-align: center; }
+    .week-heading .weekday-name { display: block; color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .week-heading .day-number { display: inline-flex; justify-content: center; width: 1.7rem; height: 1.7rem; margin-top: .12rem; border-radius: 50%; font-size: .9rem; }
+    .week-heading.today .day-number { background: var(--accent); color: white; }
+    .week-times { border-right: 1px solid var(--line); background: #f8fafc; }
+    .hour-label { height: 60px; padding: 0 .45rem; border-bottom: 1px solid #f1f5f9; color: #94a3b8; text-align: right; font: 650 .65rem/1 ui-monospace, monospace; transform: translateY(-.35rem); }
+    .week-day { position: relative; border-right: 1px solid #f1f5f9; }
+    .week-day.today { background: #eff6ff33; }
+    .hour-cell { height: 60px; border-bottom: 1px solid #f1f5f9; }
+    .week-event { position: absolute; z-index: 1; left: 3px; right: 3px; overflow: hidden; padding: .35rem; border-left: 4px solid var(--event-color, var(--accent)); border-radius: .35rem; background: color-mix(in srgb, var(--event-color, var(--accent)) 14%, white); box-shadow: 0 1px 2px #0f172a18; font-size: .68rem; line-height: 1.2; }
+    .week-event .event-title { margin-bottom: .15rem; }
+    .empty { padding: .15rem .25rem; color: #94a3b8; font-size: .65rem; }
+    footer { padding: .55rem 1rem; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: .68rem; }
+    @media (max-width: 700px) {
+      header { gap: .5rem; }
+      .toolbar { width: 100%; justify-content: space-between; }
+      #period { min-width: 0; flex: 1; }
+      main { padding: .5rem; }
+      .day { min-height: 5.2rem; padding: .22rem; }
+      .event { padding: .17rem; }
+      .event-meta { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Public schedule</h1>
+    <div class="toolbar" aria-label="Calendar controls">
+      <div class="navigation">
+        <button id="previous" type="button" aria-label="Previous period">&larr;</button>
+        <h2 id="period" aria-live="polite"></h2>
+        <button id="next" type="button" aria-label="Next period">&rarr;</button>
+        <button id="today" type="button">Today</button>
+      </div>
+      <div class="view-switch">
+        <button id="week-mode" type="button" aria-pressed="false">Week</button>
+        <button id="month-mode" type="button" aria-pressed="true">Month</button>
+      </div>
+      <label class="venue-select-wrap" for="venue-select">
+        Venue
+        <select id="venue-select" aria-label="Filter calendar by venue">
+          <option value="">All venues</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <main>
+    <p id="status" role="status">Loading schedule…</p>
+    <div class="calendar-scroll"><div id="calendar"></div></div>
+  </main>
+  <footer>Times are shown as entered for the venue.</footer>
+  <script>
+    const calendar = document.querySelector('#calendar');
+    const periodLabel = document.querySelector('#period');
+    const statusLabel = document.querySelector('#status');
+    const venueSelect = document.querySelector('#venue-select');
+    const mondayFirst = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let events = [];
+    let venues = [];
+    let selectedVenue = '';
+    let view = 'month';
+    let current = new Date();
+    current.setHours(0, 0, 0, 0);
+
+    function dateKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+    function mondayStart(date) {
+      const result = new Date(date);
+      result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+      return result;
+    }
+    function dayEvents(date) {
+      return events.filter(event =>
+        event.date === dateKey(date) &&
+        (!selectedVenue || event.venue === selectedVenue)
+      );
+    }
+    function renderMonthEvent(event) {
+        const item = document.createElement('div');
+        item.className = 'event';
+        item.style.setProperty('--event-color', event.color || '#3b82f6');
+        const title = document.createElement('span');
+        title.className = 'event-title';
+        title.textContent = event.title;
+        const meta = document.createElement('span');
+        meta.className = 'event-meta';
+        meta.textContent = `${event.startTime}–${event.endTime} · ${event.venue}`;
+        item.append(title, meta);
+        return item;
+    }
+    function renderMonth() {
+      const first = new Date(current.getFullYear(), current.getMonth(), 1);
+      const start = mondayStart(first);
+      periodLabel.textContent = current.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      const grid = document.createElement('div');
+      grid.className = 'month-grid';
+      for (const name of mondayFirst) {
+        const heading = document.createElement('div');
+        heading.className = 'weekday';
+        heading.textContent = name;
+        grid.append(heading);
+      }
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+      const dayCount = Math.ceil(((first.getDay() + 6) % 7 + monthEnd.getDate()) / 7) * 7;
+      grid.style.gridTemplateRows = `auto repeat(${dayCount / 7}, minmax(6.7rem, 1fr))`;
+      for (let offset = 0; offset < dayCount; offset++) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + offset);
+        const cell = document.createElement('section');
+        cell.className = 'day';
+        if (date.getMonth() !== current.getMonth()) cell.classList.add('outside');
+        if (dateKey(date) === dateKey(new Date())) cell.classList.add('today');
+        const number = document.createElement('div');
+        number.className = 'day-number';
+        const dateNumber = document.createElement('span');
+        dateNumber.textContent = String(date.getDate());
+        const matching = dayEvents(date);
+        number.append(dateNumber);
+        if (matching.length) {
+          const count = document.createElement('span');
+          count.style.cssText = 'color:#94a3b8;font-size:.58rem;font-weight:600';
+          count.textContent = `${matching.length} event${matching.length === 1 ? '' : 's'}`;
+          number.append(count);
+        }
+        cell.append(number);
+        for (const event of matching.slice(0, 3)) cell.append(renderMonthEvent(event));
+        if (matching.length > 3) {
+          const more = document.createElement('div');
+          more.className = 'more-events';
+          more.textContent = `+${matching.length - 3} more`;
+          cell.append(more);
+        }
+        grid.append(cell);
+      }
+      calendar.replaceChildren(grid);
+    }
+    function renderWeek() {
+      const start = mondayStart(current);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      periodLabel.textContent = start.getMonth() === end.getMonth()
+        ? `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${end.getDate()}, ${end.getFullYear()}`
+        : `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'week-wrap';
+      const header = document.createElement('div');
+      header.className = 'week-header';
+      const spacer = document.createElement('div');
+      spacer.className = 'week-header-spacer';
+      header.append(spacer);
+      const body = document.createElement('div');
+      body.className = 'week-body';
+      const times = document.createElement('div');
+      times.className = 'week-times';
+      const hours = [];
+      for (let hour = 7; hour <= 26; hour++) hours.push(hour % 24);
+      for (const hour of hours) {
+        const label = document.createElement('div');
+        label.className = 'hour-label';
+        label.textContent = `${String(hour).padStart(2, '0')}:00`;
+        times.append(label);
+      }
+      body.append(times);
+      for (let offset = 0; offset < 7; offset++) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + offset);
+        const heading = document.createElement('div');
+        heading.className = 'week-heading';
+        if (dateKey(date) === dateKey(new Date())) heading.classList.add('today');
+        const name = document.createElement('span');
+        name.className = 'weekday-name';
+        name.textContent = date.toLocaleDateString(undefined, { weekday: 'short' });
+        const dateNumber = document.createElement('span');
+        dateNumber.className = 'day-number';
+        dateNumber.textContent = String(date.getDate());
+        heading.append(name, dateNumber);
+        header.append(heading);
+
+        const column = document.createElement('div');
+        column.className = 'week-day';
+        if (dateKey(date) === dateKey(new Date())) column.classList.add('today');
+        for (const _hour of hours) {
+          const hourCell = document.createElement('div');
+          hourCell.className = 'hour-cell';
+          column.append(hourCell);
+        }
+        for (const event of dayEvents(date)) {
+          const item = document.createElement('div');
+          item.className = 'week-event';
+          item.style.setProperty('--event-color', event.color || '#3b82f6');
+          const [startHour, startMinute] = event.startTime.split(':').map(Number);
+          const [endHour, endMinute] = event.endTime.split(':').map(Number);
+          const startOffset = ((startHour - 7 + 24) % 24) * 60 + startMinute;
+          if (startOffset >= 20 * 60) continue;
+          let duration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+          if (duration <= 0) duration += 24 * 60;
+          duration = Math.min(duration, 20 * 60 - startOffset);
+          item.style.top = `${startOffset}px`;
+          item.style.height = `${Math.max(duration, 28)}px`;
+          const title = document.createElement('span');
+          title.className = 'event-title';
+          title.textContent = event.title;
+          const meta = document.createElement('span');
+          meta.className = 'event-meta';
+          meta.textContent = `${event.venue} · ${event.startTime}–${event.endTime}`;
+          item.append(title, meta);
+          column.append(item);
+        }
+        body.append(column);
+      }
+      wrapper.append(header, body);
+      calendar.replaceChildren(wrapper);
+    }
+    function render() {
+      document.querySelector('#week-mode').setAttribute('aria-pressed', String(view === 'week'));
+      document.querySelector('#month-mode').setAttribute('aria-pressed', String(view === 'month'));
+      if (view === 'week') renderWeek();
+      else renderMonth();
+    }
+    document.querySelector('#previous').addEventListener('click', () => {
+      if (view === 'week') current.setDate(current.getDate() - 7);
+      else current.setMonth(current.getMonth() - 1);
+      render();
+    });
+    document.querySelector('#next').addEventListener('click', () => {
+      if (view === 'week') current.setDate(current.getDate() + 7);
+      else current.setMonth(current.getMonth() + 1);
+      render();
+    });
+    document.querySelector('#today').addEventListener('click', () => {
+      current = new Date();
+      current.setHours(0, 0, 0, 0);
+      render();
+    });
+    document.querySelector('#week-mode').addEventListener('click', () => { view = 'week'; render(); });
+    document.querySelector('#month-mode').addEventListener('click', () => { view = 'month'; render(); });
+    venueSelect.addEventListener('change', () => {
+      selectedVenue = venueSelect.value;
+      const selected = venues.find(venue => venue.name === selectedVenue);
+      document.documentElement.style.setProperty('--accent', selected?.color || '#3b82f6');
+      render();
+    });
+
+    fetch('./schedule.json', { cache: 'no-store' })
+      .then(response => {
+        if (!response.ok) throw new Error(`Could not load schedule (${response.status}).`);
+        return response.json();
+      })
+      .then(schedule => {
+        events = Array.isArray(schedule.events) ? schedule.events : [];
+        venues = Array.isArray(schedule.venues) ? schedule.venues : [];
+        for (const venue of venues) {
+          const option = document.createElement('option');
+          option.value = venue.name;
+          option.textContent = venue.name;
+          venueSelect.append(option);
+        }
+        if (venues.length) {
+          selectedVenue = venues[0].name;
+          venueSelect.value = selectedVenue;
+          document.documentElement.style.setProperty('--accent', venues[0].color || '#3b82f6');
+        }
+        statusLabel.textContent = schedule.generatedAt
+          ? `Schedule updated ${new Date(schedule.generatedAt).toLocaleString()} · ${events.length} events`
+          : 'No schedule has been published yet.';
+        render();
+      })
+      .catch(error => {
+        statusLabel.textContent = `${error.message} The schedule owner may not have published a schedule yet.`;
+        calendar.replaceChildren();
+      });
+    render();
+  </script>
+</body>
+</html>

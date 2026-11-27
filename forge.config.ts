@@ -21,7 +21,7 @@ const config: ForgeConfig = {
     asar: {
       unpack: `**/node_modules/{${modulesToCopy.join(',')}}/**/*`,
     },
-    extraResource: ["database.db"],
+    extraResource: ["database.db", "docs"],
   },
   hooks: {
     // Automatically copy both modules into the package staging area
